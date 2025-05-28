@@ -2,7 +2,8 @@ import { Compressor } from '../base/compressor';
 import { Logger } from '../base/logger';
 import { Serializer } from '../base/serializer';
 import { StateStore } from '../base/state-store';
-import { TSerializable } from '../base/types/serializable.type';
+import { TBinary } from '../base/types/binary.type';
+import { TSerialized } from '../base/types/serialized.type';
 import { IdempotencyKey } from './interfaces/idempotent-key.interface';
 import { Options } from './interfaces/idempotent-options.interface';
 import { IdempotentTransformerInput } from './interfaces/idempotent-transformer.interface';
@@ -54,8 +55,8 @@ export class IdempotentTransformer implements IdempotentTransformer {
 
   private async compressIfEnabled(
     shouldCompress: boolean,
-    value: TSerializable
-  ): Promise<TSerializable> {
+    value: TSerialized
+  ): Promise<unknown | TBinary> {
     if (shouldCompress) {
       return this.compressor.compress(value);
     }
@@ -64,8 +65,8 @@ export class IdempotentTransformer implements IdempotentTransformer {
 
   private async decompressIfEnabled(
     shouldDecompress: boolean,
-    value: TSerializable
-  ): Promise<TSerializable> {
+    value: TBinary
+  ): Promise<TSerialized> {
     if (shouldDecompress) {
       return this.compressor.decompress(value);
     }
@@ -104,6 +105,7 @@ export class IdempotentTransformer implements IdempotentTransformer {
       }
 
       const result = await callbackFn(input);
+
       this.logger.debug(`Result: ${result}`);
       const serializedResult = await this.serializer.serialize(result);
       this.logger.debug(`Serialized result: ${serializedResult}`);
@@ -112,7 +114,7 @@ export class IdempotentTransformer implements IdempotentTransformer {
         serializedResult
       );
       this.logger.debug(`Compressed result: ${compressedResult}`);
-      await this.storage.save(taskUniqueId, compressedResult, {
+      await this.storage.save(taskUniqueId, compressedResult as TBinary, {
         methodName: callbackFn.name,
         ...(options ? options : {}),
       });

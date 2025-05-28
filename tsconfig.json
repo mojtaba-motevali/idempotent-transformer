@@ -13,6 +13,7 @@
     "sourceMap": true,
     "rootDir": "./src"
   },
+  "lib": ["ES2024", "DOM"], // Used by @msgpack/msgpack
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 } 

@@ -1,6 +1,6 @@
-import { TSerializable } from './types/serializable.type';
+import { TSerialized } from './types/serialized.type';
 
 export abstract class Serializer {
-  abstract serialize: <T>(data: T) => Promise<TSerializable>;
-  abstract deserialize: <T>(data: TSerializable) => Promise<T>;
+  abstract serialize: <T>(data: T) => Promise<TSerialized>;
+  abstract deserialize: <T>(data: TSerialized) => Promise<T>;
 }

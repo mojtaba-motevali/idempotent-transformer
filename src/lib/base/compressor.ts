@@ -1,6 +1,6 @@
-import { TSerializable } from './types/serializable.type';
+import { TBinary } from './types/binary.type';
 
 export abstract class Compressor {
-  abstract compress: (data: TSerializable) => Promise<BinaryType>;
-  abstract decompress: (data: BinaryType) => Promise<TSerializable>;
+  abstract compress: (data: TBinary) => Promise<unknown>;
+  abstract decompress: (data: unknown) => Promise<TBinary>;
 }
