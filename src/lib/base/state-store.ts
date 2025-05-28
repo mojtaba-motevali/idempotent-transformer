@@ -1,5 +1,5 @@
 import { Options } from '../idempotent-transformer/interfaces/idempotent-options.interface';
-import { TSerializable } from './types/serializable.type';
+import { TBinary } from './types/binary.type';
 
 interface IContext {
   methodName: string;
@@ -7,6 +7,6 @@ interface IContext {
 }
 
 export abstract class StateStore {
-  abstract find: (id: string) => Promise<TSerializable | null>;
-  abstract save: (id: string, value: TSerializable, context: IContext) => Promise<void>;
+  abstract find: (id: string) => Promise<TBinary | null>;
+  abstract save: (id: string, value: TBinary, context: IContext) => Promise<void>;
 }
