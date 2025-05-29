@@ -1,5 +1,4 @@
 import { Options } from '../idempotent-transformer/interfaces/idempotent-options.interface';
-import { TBinary } from './types/binary.type';
 
 interface IContext {
   methodName: string;
@@ -7,6 +6,6 @@ interface IContext {
 }
 
 export abstract class StateStore {
-  abstract find: (id: string) => Promise<TBinary | null>;
-  abstract save: (id: string, value: TBinary, context: IContext) => Promise<void>;
+  abstract find(id: string): Promise<Uint8Array<ArrayBufferLike> | null>;
+  abstract save(id: string, value: Uint8Array<ArrayBufferLike>, context: IContext): Promise<void>;
 }
