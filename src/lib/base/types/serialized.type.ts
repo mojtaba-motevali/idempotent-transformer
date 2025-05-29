@@ -1,3 +1,1 @@
-import { TBinary } from './binary.type';
-
-export type TSerialized = TBinary;
+export type TSerialized = Uint8Array<ArrayBufferLike>;
