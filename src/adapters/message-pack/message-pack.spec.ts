@@ -40,4 +40,18 @@ describe('MessagePack', () => {
     const deserialized = await messagePack.deserialize(serialized);
     expect(deserialized).toEqual(data);
   });
+
+  it('should serialize and deserialize data with undefined values', async () => {
+    const messagePack = new MessagePack();
+    const data = {
+      name: 'John',
+      age: 30,
+      isStudent: true,
+      undefinedValue: undefined,
+      nullValue: null,
+    };
+    const serialized = await messagePack.serialize(data);
+    const deserialized = await messagePack.deserialize(serialized);
+    expect(deserialized).toEqual({ name: 'John', age: 30, isStudent: true, nullValue: null });
+  });
 });

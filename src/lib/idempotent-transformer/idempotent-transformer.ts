@@ -3,6 +3,8 @@ import { Logger } from '../base/logger';
 import { Serializer } from '../base/serializer';
 import { StateStore } from '../base/state-store';
 import { TSerialized } from '../base/types/serialized.type';
+import { IdempotencyConflictException } from './exceptions/conflict.exception';
+import { IdempotencyResult } from './interfaces/idempotency-result.interface';
 import { IdempotencyKey } from './interfaces/idempotent-key.interface';
 import { Options } from './interfaces/idempotent-options.interface';
 import { IdempotentTransformerInput } from './interfaces/idempotent-transformer.interface';
@@ -81,14 +83,14 @@ export class IdempotentTransformer implements IdempotentTransformer {
     <T>(workflowId: string, callbackFn: (input: T) => Promise<T>) =>
     async (input: T, idempotencyKey: IdempotencyKey, options?: Options): Promise<T> => {
       this.logger.debug(`Creating transformer for workflow ${workflowId}`);
-      const serializedInput = await this.serializer.serialize({
-        input,
+      const serializedInput = await this.serializer.serialize(input);
+      const uniqueFlowId = await this.serializer.serialize({
         workflowId,
         idempotencyKey,
-        options,
       });
-      this.logger.debug(`Serialized input: ${serializedInput}`);
-      const taskUniqueId = crypto.createHash('md5').update(serializedInput).digest('hex');
+      this.logger.debug(`Serialized uniqueFlowId: ${uniqueFlowId}`);
+      const taskUniqueId = crypto.createHash('md5').update(uniqueFlowId).digest('hex');
+      const inputHash = crypto.createHash('md5').update(serializedInput).digest('hex');
       this.logger.debug(`Task unique id: ${taskUniqueId}`);
       const cachedResult = await this.storage.find(taskUniqueId);
       this.logger.debug(`Cached result: ${cachedResult}`);
@@ -98,22 +100,35 @@ export class IdempotentTransformer implements IdempotentTransformer {
           !!options?.shouldCompress,
           cachedResult
         );
-        const deserializedResult = await this.serializer.deserialize<T>(decompressedResult);
+        const deserializedResult =
+          await this.serializer.deserialize<IdempotencyResult<T>>(decompressedResult);
+        if (deserializedResult.executionInputHash !== inputHash) {
+          this.logger.debug(`Input hash mismatch for task ${taskUniqueId}`);
+          throw new IdempotencyConflictException();
+        }
         this.logger.debug(`Deserialized result: ${deserializedResult}`);
-        return deserializedResult;
+        return deserializedResult.executionResult;
       }
 
       const result = await callbackFn(input);
 
-      this.logger.debug(`Result: ${result}`);
-      const serializedResult = await this.serializer.serialize(result);
-      this.logger.debug(`Serialized result: ${serializedResult}`);
-      const compressedResult = await this.compressIfEnabled(
+      this.logger.debug(`Execution was sucessful, saving result to storage`);
+      const idempotentResult: IdempotencyResult<T> = {
+        executionResult: result,
+        executionInputHash: inputHash,
+      };
+      const serializedIdempotentResult = await this.serializer.serialize(idempotentResult);
+
+      this.logger.debug(`Serialized result: ${serializedIdempotentResult}`);
+
+      const compressedIdempotentResult = await this.compressIfEnabled(
         !!options?.shouldCompress,
-        serializedResult
+        serializedIdempotentResult
       );
-      this.logger.debug(`Compressed result: ${compressedResult}`);
-      await this.storage.save(taskUniqueId, compressedResult, {
+
+      this.logger.debug(`Compressed result: ${compressedIdempotentResult}`);
+
+      await this.storage.save(taskUniqueId, compressedIdempotentResult, {
         methodName: callbackFn.name,
         ...(options ? options : {}),
       });

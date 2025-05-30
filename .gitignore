@@ -136,4 +136,4 @@ dist
 .pnp.*
 
 
-cucumber-report.json
+cucumber-report.html

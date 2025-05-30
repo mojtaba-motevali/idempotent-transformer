@@ -15,6 +15,10 @@ export class Repository extends StateStore {
     });
   }
 
+  async destroy() {
+    await this.client.quit();
+  }
+
   save = async (key: string, value: Uint8Array<ArrayBufferLike>): Promise<void> => {
     const buffer = Buffer.from(value);
     await this.client.sendCommand(['SET', key, buffer], {
