@@ -12,12 +12,21 @@ export class MessagePack extends Serializer {
   private decoder: Decoder;
   private extensionCodec: ExtensionCodec;
 
-  constructor() {
+  private static instance: MessagePack;
+
+  private constructor() {
     super();
     this.extensionCodec = new ExtensionCodec();
     this.encoder = new Encoder({ extensionCodec: this.extensionCodec, ignoreUndefined: true });
     this.decoder = new Decoder({ extensionCodec: this.extensionCodec });
     this.build();
+  }
+
+  static getInstance() {
+    if (!MessagePack.instance) {
+      MessagePack.instance = new MessagePack();
+    }
+    return MessagePack.instance;
   }
 
   build() {

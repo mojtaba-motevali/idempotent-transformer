@@ -50,7 +50,7 @@ BeforeAll(async () => {
 
   transformer = IdempotentTransformer.getInstance({
     storage,
-    serializer: new MessagePack(),
+    serializer: MessagePack.getInstance(),
     compressor: new ZstdCompressor(),
     log: new ConsoleLogger(),
   });
