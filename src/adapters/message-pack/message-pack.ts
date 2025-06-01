@@ -1,22 +1,26 @@
 import { decode, Decoder, Encoder, ExtensionCodec } from '@msgpack/msgpack';
 import { Serializer } from '../../lib/base/serializer';
 import { TSerialized } from '../../lib/base/types/serialized.type';
-import { MessagePackOptions } from './message-pack.interface';
+import { Serializable } from './message-pack.interface';
+import { decoratedModels, SERIALIZE_NAME_METADATA_KEY } from './decorators/serialize.decorator';
+import { ModelIsNotDecoratedException } from './errors/model-is-not-decorated.exception';
+import { throwIfTrue } from './lib/throw-if-true';
+import { MethodNotImplementedException } from './errors/method-not-implemented.exception';
 
 export class MessagePack extends Serializer {
   private encoder: Encoder;
   private decoder: Decoder;
   private extensionCodec: ExtensionCodec;
 
-  constructor({ models }: MessagePackOptions = {}) {
+  constructor() {
     super();
     this.extensionCodec = new ExtensionCodec();
     this.encoder = new Encoder({ extensionCodec: this.extensionCodec, ignoreUndefined: true });
     this.decoder = new Decoder({ extensionCodec: this.extensionCodec });
-    this.build(models);
+    this.build();
   }
 
-  build(models: MessagePackOptions['models']) {
+  build() {
     // Set<T>
     this.extensionCodec.register({
       type: 0,
@@ -47,31 +51,26 @@ export class MessagePack extends Serializer {
       },
     });
 
-    if (!models) {
-      return;
-    }
-
     this.extensionCodec.register({
       type: 2,
       encode: (object: unknown): Uint8Array | null => {
         if (object instanceof Object) {
-          for (const { name, model } of models) {
-            if (object instanceof model) {
-              return this.encoder.encode([name, object.toJSON()]);
-            }
+          const unBoxedObject = object as unknown as Serializable;
+          const key: string = (unBoxedObject as any).constructor[SERIALIZE_NAME_METADATA_KEY];
+          if (decoratedModels.has(key)) {
+            throwIfTrue(!unBoxedObject.toJSON, new MethodNotImplementedException('toJSON'));
+            return this.encoder.encode([key, unBoxedObject.toJSON()]);
           }
-          return null;
         }
         return null;
       },
       decode: (data: Uint8Array) => {
-        const array = decode(data) as [string, unknown];
+        const array = decode(data) as [string, ReturnType<Serializable['toJSON']>];
         const [name, object] = array;
-        const model = models.find(({ name: modelName }) => modelName === name);
-        if (model) {
-          return new model.model(object);
-        }
-        return object;
+        const Model = decoratedModels.get(name) as unknown as Serializable;
+        throwIfTrue(!Model, new ModelIsNotDecoratedException(name));
+        throwIfTrue(!Model.fromJSON, new MethodNotImplementedException('fromJSON'));
+        return Model.fromJSON(object);
       },
     });
   }

@@ -1,20 +1,18 @@
 type PrimitiveTypes = string | number | boolean | Date;
 type CollectionType =
+  | object
   | Array<PrimitiveTypes | object>
   | Set<PrimitiveTypes>
   | Map<PrimitiveTypes, PrimitiveTypes | object>;
 
 type SupportedTypes = PrimitiveTypes | CollectionType;
 
-export interface Serializable {
+export interface Serializable<T = any> {
   toJSON(): Record<string, SupportedTypes>;
-}
-
-export type GenericModel = new (...args: any[]) => Serializable;
-
-export interface MessagePackOptions {
-  models?: {
-    name: string;
-    model: GenericModel;
-  }[];
+  /**
+   * @description Use this to construct the object from a JSON object.
+   * @param json - The JSON object to construct the object from.
+   * @returns The constructed object.
+   */
+  fromJSON(json: ReturnType<Serializable<T>['toJSON']>): T;
 }
