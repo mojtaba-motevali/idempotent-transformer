@@ -8,7 +8,6 @@ import { Repository } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
-import { IdempotencyResult } from '../../../../../lib/idempotent-transformer/interfaces/idempotency-result.interface';
 
 let transformer: IdempotentTransformer;
 let wrappedTask: (input: any, key: IdempotencyKey, options?: Options) => Promise<any>;
@@ -19,6 +18,7 @@ const idempotencyKey: IdempotencyKey = { key: faker.string.uuid() };
 let taskUniqueId: string;
 const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
+let retrievedResult: string;
 
 BeforeAll(async () => {
   storage = new Repository('redis://localhost:6379');
@@ -31,52 +31,32 @@ BeforeAll(async () => {
   });
 });
 
-Given('compression is enabled', async function () {
+Given('compression is now enabled in the library configuration', async function () {
   // Already set in BeforeAll
 });
 
-Given('a task result "Hello, world!" is ready to be persisted', async function () {
+Given('an uncompressed task result was previously stored in the state store', async function () {
+  // Store the result without compression
   const asyncTask = async (input: any) => taskResult;
   const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
   wrappedTask = wrapped.task;
-});
-
-When('the task result is serialized and persisted to the state store', async function () {
-  // Persist the result with compression enabled
-  await wrappedTask(taskInput, idempotencyKey, { shouldCompress: true });
-  // Compute the taskUniqueId for direct state store access
+  await wrappedTask(taskInput, idempotencyKey, { shouldCompress: false });
   taskUniqueId = await transformer.createHash({
     workflowId,
     idempotencyKey,
   });
 });
 
-Then('the persisted data should be compressed', async function () {
-  const persisted = await storage.find(taskUniqueId);
-  // Try to decompress, should succeed
-  let decompressed: Uint8Array | undefined = undefined;
-  let decompressError = null;
-  try {
-    decompressed = await compressor.decompress(persisted!);
-  } catch (err) {
-    decompressError = err;
+When(
+  'the task result is retrieved from the state store and should correctly retrieve the uncompressed result',
+  async function () {
+    // Now compression is enabled, but the stored data is uncompressed
+    retrievedResult = await wrappedTask(taskInput, idempotencyKey, { shouldCompress: true });
   }
-  // Check that the decompression succeeded, this throws an exception if it fails to decompress.
-  expect(decompressError).to.be.null;
-  expect(decompressed).to.not.be.undefined;
-});
+);
 
-Then('the original task result should not be stored in plain text', async function () {
-  const persisted = await storage.find(taskUniqueId);
-  let deserialized: IdempotencyResult<string> | undefined;
-  let error = null;
-  try {
-    deserialized = await MessagePack.getInstance().deserialize(persisted as Uint8Array);
-  } catch (err) {
-    error = err;
-  }
-  expect(deserialized).to.be.undefined;
-  expect(error).to.not.be.null;
+Then("retrieved result should match the original task's result", async function () {
+  expect(retrievedResult).to.equal(taskResult);
 });
 
 AfterAll(async () => {
