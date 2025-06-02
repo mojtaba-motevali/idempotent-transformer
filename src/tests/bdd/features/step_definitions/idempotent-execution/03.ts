@@ -1,12 +1,12 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { IdempotentTransformer } from '../../../../lib/idempotent-transformer';
-import { IdempotencyKey } from '../../../../lib/idempotent-transformer/interfaces/idempotent-key.interface';
-import { Options } from '../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
-import { ConsoleLogger } from '../../../../lib/logger/console-logger';
-import { Repository } from '../../../../adapters/redis';
-import { MessagePack } from '../../../../adapters/message-pack';
-import { ZstdCompressor } from '../../../../adapters/zstd';
+import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
+import { IdempotencyKey } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-key.interface';
+import { Options } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
+import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
+import { Repository } from '../../../../../adapters/redis';
+import { MessagePack } from '../../../../../adapters/message-pack';
+import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
 
 let transformer: IdempotentTransformer;
