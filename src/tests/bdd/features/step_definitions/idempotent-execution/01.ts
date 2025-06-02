@@ -17,6 +17,7 @@ let secondResult: any;
 let input = faker.string.uuid();
 let storage: Repository;
 const idempotencyKey = faker.string.uuid();
+const workflowId = faker.string.uuid();
 let taskExecutionCount = 0;
 let currentDate = new Date();
 
@@ -51,7 +52,7 @@ Given('an asynchronous task that returns a value', async function () {
   };
 });
 When('I wrap the task with the idempotent execution wrapper', async function () {
-  const wrapped = transformer.makeIdempotent('test-workflow', { task: asyncTask });
+  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
   wrappedTask = wrapped.task;
 });
 
