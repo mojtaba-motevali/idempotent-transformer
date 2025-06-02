@@ -64,14 +64,18 @@ export class IdempotentTransformer implements IdempotentTransformer {
     return value;
   }
 
-  private async decompressIfEnabled(
-    shouldDecompress: boolean,
-    value: Uint8Array<ArrayBufferLike>
-  ): Promise<TSerialized> {
-    if (shouldDecompress) {
+  private async decompressIfCompressed(value: Uint8Array<ArrayBufferLike>): Promise<TSerialized> {
+    if (this.compressor.isCompressed(value)) {
       return this.compressor.decompress(value);
     }
     return value;
+  }
+
+  async createHash<T>(value: T): Promise<string> {
+    return crypto
+      .createHash('md5')
+      .update(await this.serializer.serialize(value))
+      .digest('hex');
   }
 
   /**
@@ -83,23 +87,24 @@ export class IdempotentTransformer implements IdempotentTransformer {
     <T>(workflowId: string, callbackFn: (input: T) => Promise<T>) =>
     async (input: T, idempotencyKey: IdempotencyKey, options?: Options): Promise<T> => {
       this.logger.debug(`Creating transformer for workflow ${workflowId}`);
-      const serializedInput = await this.serializer.serialize(input);
-      const uniqueFlowId = await this.serializer.serialize({
+      /**
+       * The task unique id is a hash of the workflow id and the idempotency key.
+       */
+      const taskUniqueId = await this.createHash({
         workflowId,
         idempotencyKey,
       });
-      this.logger.debug(`Serialized uniqueFlowId: ${uniqueFlowId}`);
-      const taskUniqueId = crypto.createHash('md5').update(uniqueFlowId).digest('hex');
-      const inputHash = crypto.createHash('md5').update(serializedInput).digest('hex');
+      /**
+       * The input hash is a hash of the input.
+       */
+      const inputHash = await this.createHash(input);
+
       this.logger.debug(`Task unique id: ${taskUniqueId}`);
       const cachedResult = await this.storage.find(taskUniqueId);
       this.logger.debug(`Cached result: ${cachedResult}`);
       if (cachedResult) {
         this.logger.debug(`Found cached result for task ${taskUniqueId}`);
-        const decompressedResult = await this.decompressIfEnabled(
-          !!options?.shouldCompress,
-          cachedResult
-        );
+        const decompressedResult = await this.decompressIfCompressed(cachedResult);
         const deserializedResult =
           await this.serializer.deserialize<IdempotencyResult<T>>(decompressedResult);
         if (deserializedResult.executionInputHash !== inputHash) {
