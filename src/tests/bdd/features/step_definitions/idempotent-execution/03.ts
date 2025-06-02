@@ -1,8 +1,6 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
-import { IdempotencyKey } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-key.interface';
-import { Options } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
 import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
 import { Repository } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
@@ -10,7 +8,6 @@ import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
 
 let transformer: IdempotentTransformer;
-let wrappedTask: (input: any, key: IdempotencyKey, options?: Options) => Promise<any>;
 let retryCount = 0;
 let workflowExecution = [0, 0, 0, 0];
 let workflowTasks = {
@@ -32,20 +29,17 @@ let workflowTasks = {
   },
 };
 
-let input = faker.string.uuid();
+const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
-let storage: Repository;
+const storage: Repository = new Repository('redis://localhost:6379');
 const idempotencyKeys = [
   faker.string.uuid(),
   faker.string.uuid(),
   faker.string.uuid(),
   faker.string.uuid(),
 ];
-let taskExecutionCount = 0;
-let currentDate = new Date();
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
   await storage.initialize();
 
   transformer = IdempotentTransformer.getInstance({

@@ -18,3 +18,9 @@ Feature: Optional compression of serialized task results
     And an uncompressed task result was previously stored in the state store
     When the task result is retrieved from the state store and should correctly retrieve the uncompressed result
     Then retrieved result should match the original task's result
+
+  Scenario: Backward compatibility with existing compressed data
+    Given the compression was enabled and now is disabled and a compressed task result was previously stored in the state store
+    When the task result is retrieved with compression disabled from the state store, it should correclty be decompressed
+    Then retrieved result must match the original task's result.
+    
