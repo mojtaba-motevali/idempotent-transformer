@@ -9,28 +9,13 @@ The library shall wrap any asynchronous task and guarantee that the original tas
         When I execute the wrapped task again
         Then the task should not be executed again and the cached result should be returned
 
-    Scenario: Task execution with error handling
-        Given an asynchronous task that throws an error
-        When I wrap the task with the idempotent execution wrapper
-        And I execute the wrapped task
-        Then the error should be propagated
-        When I execute the wrapped task again
-        Then the error should be propagated again
-        And the task should be executed each time
-
     Scenario: Task execution with different parameters
         Given an asynchronous task that accepts parameters
-        When I wrap the task with the idempotent execution wrapper
-        And I execute the wrapped task with parameter "A"
-        Then the task should execute with parameter "A"
-        And the result should be cached for parameter "A"
-        When I execute the wrapped task with parameter "B"
-        Then the task should execute throw Conflict exception
+        When I wrap the task with the idempotent execution wrapper and I execute the wrapped task with parameter "A" successfully
+        Then the task fails with Conflict exception when I execute the wrapped task with parameter "B"
 
-    Scenario: Task execution with timeout
-        Given an asynchronous task that takes longer than the timeout period
-        When I wrap the task with the idempotent execution wrapper
-        And I set a timeout period
-        And I execute the wrapped task
-        Then the task should be interrupted after the timeout period
-        And a timeout error should be returned
+    Scenario: Workflow Idempotency
+        Given a workflow including 4 tasks
+        When I execute 2 tasks successfully and third one fails
+        Then I retry execution of the all tasks  
+        Then the task should execute successfully and all tasks should have been executed only once

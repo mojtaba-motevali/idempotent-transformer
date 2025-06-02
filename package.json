@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",
+    "@faker-js/faker": "^9.8.0",
     "@types/chai": "^4.3.11",
     "chai": "^4.3.10",
     "ts-node": "^10.9.2"
