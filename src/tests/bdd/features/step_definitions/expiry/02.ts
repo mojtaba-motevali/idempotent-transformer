@@ -11,17 +11,15 @@ import { faker } from '@faker-js/faker';
 
 let transformer: IdempotentTransformer;
 let wrappedTask: (input: any, key: IdempotencyKey, options?: IOptions) => Promise<any>;
-let storage: Repository;
+const storage = new Repository('redis://localhost:6379');
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
 const idempotencyKey: IdempotencyKey = { key: faker.string.uuid() };
 let taskUniqueId: string;
 const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
-const ttlMs = 2000; // 2 seconds
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
   await storage.initialize();
   transformer = IdempotentTransformer.getInstance({
     storage,
@@ -31,17 +29,18 @@ BeforeAll(async () => {
   });
 });
 
-Given('a TTL of 2 seconds is configured for state entries S1', async function () {
+Given('no TTL is configured for state entries S2', async function () {
   const asyncTask = async (input: any) => taskResult;
-  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask }, { ttl: ttlMs });
+  // No TTL option passed
+  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask }, { ttl: null });
   wrappedTask = wrapped.task;
 });
 
-Given('a task result "Hello, world!" is ready to be persisted S1', async function () {
+Given('a task result "Hello, world!" is ready to be persisted S2', async function () {
   // Already set up in previous step
 });
 
-When('the task result is serialized and persisted to the state store S1', async function () {
+When('the task result is serialized and persisted to the state store S2', async function () {
   await wrappedTask(taskInput, idempotencyKey);
   taskUniqueId = await transformer.createHash({
     workflowId,
@@ -49,15 +48,15 @@ When('the task result is serialized and persisted to the state store S1', async 
   });
 });
 
-Then('the persisted entry should exist in the state store immediately S1', async function () {
+Then('the persisted entry should exist in the state store S2', async function () {
   const persisted = await storage.find(taskUniqueId);
   expect(persisted).to.not.be.null;
 });
 
-Then('after 3 seconds, the entry should be expired and no longer available S1', async function () {
+Then('the entry should not expire automatically S2', async function () {
   await new Promise((resolve) => setTimeout(resolve, 3000));
   const persisted = await storage.find(taskUniqueId);
-  expect(persisted).to.be.null;
+  expect(persisted).to.not.be.null;
 });
 
 AfterAll(async () => {
