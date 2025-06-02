@@ -6,12 +6,15 @@ import { TSerialized } from '../base/types/serialized.type';
 import { IdempotencyConflictException } from './exceptions/conflict.exception';
 import { IdempotencyResult } from './interfaces/idempotency-result.interface';
 import { IdempotencyKey } from './interfaces/idempotent-key.interface';
-import { Options } from './interfaces/idempotent-options.interface';
+import { IOptions } from './interfaces/idempotent-options.interface';
 import { IdempotentTransformerInput } from './interfaces/idempotent-transformer.interface';
-import { MakeIdempotentResult } from './interfaces/make-idempotent.interface';
+import {
+  IdempotentTransformerOptions,
+  MakeIdempotentResult,
+} from './interfaces/make-idempotent.interface';
 import crypto from 'node:crypto';
 
-export class IdempotentTransformer implements IdempotentTransformer {
+export class IdempotentTransformer {
   private static instance: IdempotentTransformer;
   private storage: StateStore;
   private serializer: Serializer;
@@ -41,14 +44,19 @@ export class IdempotentTransformer implements IdempotentTransformer {
 
   makeIdempotent<T extends Record<string, (input: any) => Promise<any>>>(
     workflowId: string,
-    functions: T
+    functions: T,
+    options: IdempotentTransformerOptions = {
+      ttl: 1000 * 60 * 60,
+    }
   ): MakeIdempotentResult<T> {
     const callbacks = functions as Record<string, (input: any) => Promise<any>>;
 
     const result = {} as MakeIdempotentResult<T>;
 
     for (const key of Object.keys(callbacks)) {
-      result[key as keyof T] = this.createTransformer(workflowId, callbacks[key]);
+      result[key as keyof T] = this.createTransformer(workflowId, callbacks[key], {
+        ttl: options.ttl,
+      });
     }
 
     return result;
@@ -84,8 +92,19 @@ export class IdempotentTransformer implements IdempotentTransformer {
    * @returns An IdempotentTransformer instance
    */
   private createTransformer =
-    <T>(workflowId: string, callbackFn: (input: T) => Promise<T>) =>
-    async (input: T, idempotencyKey: IdempotencyKey, options?: Options): Promise<T> => {
+    <T>(
+      workflowId: string,
+      callbackFn: (input: T) => Promise<T>,
+      { ttl }: IdempotentTransformerOptions
+    ) =>
+    /**
+     * The transformeed task
+     * @param input - The input to the task
+     * @param idempotencyKey - The idempotency key (Must be unique for each task inside workflow)
+     * @param options - The options for the transformer
+     * @returns The result of the transformation function
+     */
+    async (input: T, idempotencyKey: IdempotencyKey, options?: IOptions): Promise<T> => {
       this.logger.debug(`Creating transformer for workflow ${workflowId}`);
       /**
        * The task unique id is a hash of the workflow id and the idempotency key.
@@ -134,8 +153,10 @@ export class IdempotentTransformer implements IdempotentTransformer {
       this.logger.debug(`Compressed result: ${compressedIdempotentResult}`);
 
       await this.storage.save(taskUniqueId, compressedIdempotentResult, {
-        methodName: callbackFn.name,
-        ...(options ? options : {}),
+        ttl: ttl ?? null,
+        context: {
+          taskName: callbackFn.name,
+        },
       });
       this.logger.debug(`Saved result for task ${taskUniqueId}`);
       return result;

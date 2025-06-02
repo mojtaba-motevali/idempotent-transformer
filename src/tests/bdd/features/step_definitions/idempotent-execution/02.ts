@@ -13,10 +13,9 @@ let asyncTask: (input: any) => Promise<any>;
 const taskIdempotencyKey = faker.string.uuid();
 const workflowId = faker.string.uuid();
 const input = faker.string.uuid();
-let storage: Repository;
+const storage = new Repository('redis://localhost:6379');
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
   await storage.initialize();
 
   transformer = IdempotentTransformer.getInstance({

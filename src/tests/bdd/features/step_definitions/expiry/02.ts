@@ -8,11 +8,10 @@ import { Repository } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
-import { IdempotencyResult } from '../../../../../lib/idempotent-transformer/interfaces/idempotency-result.interface';
 
 let transformer: IdempotentTransformer;
 let wrappedTask: (input: any, key: IdempotencyKey, options?: IOptions) => Promise<any>;
-let storage: Repository;
+const storage = new Repository('redis://localhost:6379');
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
 const idempotencyKey: IdempotencyKey = { key: faker.string.uuid() };
@@ -21,7 +20,6 @@ const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
   await storage.initialize();
   transformer = IdempotentTransformer.getInstance({
     storage,
@@ -31,52 +29,34 @@ BeforeAll(async () => {
   });
 });
 
-Given('compression is enabled', async function () {
-  // Already set in BeforeAll
-});
-
-Given('a task result "Hello, world!" is ready to be persisted', async function () {
+Given('no TTL is configured for state entries S2', async function () {
   const asyncTask = async (input: any) => taskResult;
-  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
+  // No TTL option passed
+  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask }, { ttl: null });
   wrappedTask = wrapped.task;
 });
 
-When('the task result is serialized and persisted to the state store', async function () {
-  // Persist the result with compression enabled
-  await wrappedTask(taskInput, idempotencyKey, { shouldCompress: true });
-  // Compute the taskUniqueId for direct state store access
+Given('a task result "Hello, world!" is ready to be persisted S2', async function () {
+  // Already set up in previous step
+});
+
+When('the task result is serialized and persisted to the state store S2', async function () {
+  await wrappedTask(taskInput, idempotencyKey);
   taskUniqueId = await transformer.createHash({
     workflowId,
     idempotencyKey,
   });
 });
 
-Then('the persisted data should be compressed', async function () {
+Then('the persisted entry should exist in the state store S2', async function () {
   const persisted = await storage.find(taskUniqueId);
-  // Try to decompress, should succeed
-  let decompressed: Uint8Array | undefined = undefined;
-  let decompressError = null;
-  try {
-    decompressed = await compressor.decompress(persisted!);
-  } catch (err) {
-    decompressError = err;
-  }
-  // Check that the decompression succeeded, this throws an exception if it fails to decompress.
-  expect(decompressError).to.be.null;
-  expect(decompressed).to.not.be.undefined;
+  expect(persisted).to.not.be.null;
 });
 
-Then('the original task result should not be stored in plain text', async function () {
+Then('the entry should not expire automatically S2', async function () {
+  await new Promise((resolve) => setTimeout(resolve, 3000));
   const persisted = await storage.find(taskUniqueId);
-  let deserialized: IdempotencyResult<string> | undefined;
-  let error = null;
-  try {
-    deserialized = await MessagePack.getInstance().deserialize(persisted as Uint8Array);
-  } catch (err) {
-    error = err;
-  }
-  expect(deserialized).to.be.undefined;
-  expect(error).to.not.be.null;
+  expect(persisted).to.not.be.null;
 });
 
 AfterAll(async () => {
