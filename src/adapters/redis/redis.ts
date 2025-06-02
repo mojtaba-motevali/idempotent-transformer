@@ -1,5 +1,5 @@
 import { createClient, RedisClientOptions } from 'redis';
-import { StateStore } from '../../lib/base/state-store';
+import { IStateStoreOptions, StateStore } from '../../lib/base/state-store';
 
 export class Repository extends StateStore {
   private client: ReturnType<typeof createClient>;
@@ -19,9 +19,25 @@ export class Repository extends StateStore {
     await this.client.quit();
   }
 
-  save = async (key: string, value: Uint8Array<ArrayBufferLike>): Promise<void> => {
+  /**
+   * Get the expiry command for the Redis SET command.
+   * @param ttl - The TTL in milliseconds.
+   * @returns The expiry command for the Redis SET command.
+   */
+  private getExpiry(ttl: number | null): string[] {
+    if (ttl) {
+      return ['PX', ttl.toString()];
+    }
+    return [];
+  }
+
+  save = async (
+    key: string,
+    value: Uint8Array<ArrayBufferLike>,
+    options: IStateStoreOptions
+  ): Promise<void> => {
     const buffer = Buffer.from(value);
-    await this.client.sendCommand(['SET', key, buffer], {
+    await this.client.sendCommand(['SET', key, buffer, ...this.getExpiry(options.ttl)], {
       typeMapping: {
         '36': Buffer,
       },

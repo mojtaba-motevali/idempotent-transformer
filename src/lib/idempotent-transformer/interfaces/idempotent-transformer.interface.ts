@@ -25,5 +25,3 @@ export interface IdempotentTransformerInput {
    */
   compressor: Compressor;
 }
-
-export interface IdempotentTransformerOutput {}
