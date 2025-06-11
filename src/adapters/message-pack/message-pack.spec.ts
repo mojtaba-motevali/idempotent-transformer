@@ -1,6 +1,47 @@
 import { Serialize } from './decorators/serialize.decorator';
 import { MessagePack } from './message-pack';
 
+@Serialize({ name: 'Lolita' })
+class Test {
+  #a: string;
+  #b: number;
+  constructor(a: string, b: number) {
+    this.#a = a;
+    this.#b = b;
+  }
+
+  toJSON() {
+    return {
+      a: this.#a,
+      b: this.#b,
+    };
+  }
+  static fromJSON(json: any) {
+    return new Test(json.a, json.b);
+  }
+  getB() {
+    return this.#b + 20;
+  }
+}
+
+@Serialize({ name: 'MyTest2' })
+class Test2 {
+  constructor(
+    public a: string,
+    public b: Test
+  ) {}
+
+  toJSON() {
+    return {
+      a: this.a,
+      b: this.b.toJSON(),
+    };
+  }
+  static fromJSON(json: ReturnType<Test2['toJSON']>) {
+    return new Test2(json.a, new Test(json.b.a, json.b.b));
+  }
+}
+
 describe('MessagePack', () => {
   it('should serialize and deserialize data', async () => {
     const messagePack = MessagePack.getInstance();
@@ -43,41 +84,6 @@ describe('MessagePack', () => {
   });
 
   it('should serialize and deserialize data with all types of data', async () => {
-    @Serialize({ name: 'Test' })
-    class Test {
-      #a: string;
-      constructor(a: string) {
-        this.#a = a;
-      }
-
-      toJSON() {
-        return {
-          a: this.#a,
-        };
-      }
-      static fromJSON(json: any) {
-        return new Test(json.a);
-      }
-    }
-
-    @Serialize({ name: 'Test2' })
-    class Test2 {
-      constructor(
-        public a: string,
-        public b: Test
-      ) {}
-
-      toJSON() {
-        return {
-          a: this.a,
-          b: this.b.toJSON(),
-        };
-      }
-      static fromJSON(json: ReturnType<Test2['toJSON']>) {
-        return new Test2(json.a, new Test(json.b.a));
-      }
-    }
-
     const messagePack = MessagePack.getInstance();
     const data = {
       name: 'John',
@@ -85,8 +91,8 @@ describe('MessagePack', () => {
       isStudent: true,
       undefinedValue: undefined,
       nullValue: null,
-      test: new Test('a'),
-      test2: new Test2('b', new Test('c')),
+      test: new Test('a', 10),
+      test2: new Test2('b', new Test('c', 20)),
     };
     const serialized = await messagePack.serialize(data);
     const deserialized: any = await messagePack.deserialize(serialized);
@@ -99,8 +105,9 @@ describe('MessagePack', () => {
       age: 30,
       isStudent: true,
       nullValue: null,
-      test: { a: 'a' },
-      test2: { a: 'b', b: { a: 'c' } },
+      test: { a: 'a', b: 10 },
+      test2: { a: 'b', b: { a: 'c', b: 20 } },
     });
+    expect(deserialized.test.getB()).toEqual(30);
   });
 });

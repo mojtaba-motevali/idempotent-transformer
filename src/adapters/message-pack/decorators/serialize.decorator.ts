@@ -19,5 +19,6 @@ export function Serialize({ name }: { name: string }): ClassDecorator {
       configurable: false,
       enumerable: false,
     });
+    return target;
   };
 }
