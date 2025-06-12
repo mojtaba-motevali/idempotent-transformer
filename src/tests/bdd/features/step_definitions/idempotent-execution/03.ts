@@ -32,12 +32,6 @@ let workflowTasks = {
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
 const storage: Repository = new Repository('redis://localhost:6379');
-const idempotencyKeys = [
-  faker.string.uuid(),
-  faker.string.uuid(),
-  faker.string.uuid(),
-  faker.string.uuid(),
-];
 
 BeforeAll(async () => {
   await storage.initialize();
@@ -61,9 +55,9 @@ When('I execute 2 tasks successfully and third one fails', async function () {
   const wrapped = transformer.makeIdempotent(idempotentWorkflowKey, { ...workflowTasks });
   let error: unknown;
   try {
-    const result1 = await wrapped.task1(input, { key: idempotencyKeys[0] });
-    const result2 = await wrapped.task2(result1, { key: idempotencyKeys[1] });
-    await wrapped.task3(result2, { key: idempotencyKeys[2] });
+    const result1 = await wrapped.task1(input);
+    const result2 = await wrapped.task2(result1);
+    await wrapped.task3(result2);
   } catch (err) {
     error = err;
   }
@@ -73,10 +67,10 @@ When('I execute 2 tasks successfully and third one fails', async function () {
 Then('I retry execution of the all tasks', async function () {
   ++retryCount;
   const wrapped = transformer.makeIdempotent(idempotentWorkflowKey, { ...workflowTasks });
-  await wrapped.task1(input, { key: idempotencyKeys[0] });
-  await wrapped.task2(input, { key: idempotencyKeys[1] });
-  await wrapped.task3(input, { key: idempotencyKeys[2] });
-  await wrapped.task4(input, { key: idempotencyKeys[3] });
+  await wrapped.task1(input);
+  await wrapped.task2(input);
+  await wrapped.task3(input);
+  await wrapped.task4(input);
 });
 
 Then(

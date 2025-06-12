@@ -5,7 +5,6 @@ import { StateStore } from '../base/state-store';
 import { TSerialized } from '../base/types/serialized.type';
 import { IdempotencyConflictException } from './exceptions/conflict.exception';
 import { IdempotencyResult } from './interfaces/idempotency-result.interface';
-import { IdempotencyKey } from './interfaces/idempotent-key.interface';
 import { IOptions } from './interfaces/idempotent-options.interface';
 import { IdempotentTransformerInput } from './interfaces/idempotent-transformer.interface';
 import {
@@ -29,6 +28,18 @@ export class IdempotentTransformer {
     this.logger = log;
   }
 
+  /**
+   * Checks if the last argument in the array matches the shape of IOptions.
+   * Returns true if the last argument is an object and has at least one property from IOptions.
+   */
+  private isLastArgOptions(args: any[]): boolean {
+    if (!args.length) return false;
+    const lastArg = args[args.length - 1];
+    if (typeof lastArg !== 'object' || lastArg === null) return false;
+    const optionKeys: (keyof IOptions)[] = ['shouldCompress'];
+    return optionKeys.some((key) => key in lastArg);
+  }
+
   static getInstance(input: IdempotentTransformerInput) {
     if (!IdempotentTransformer.instance) {
       const { storage, serializer, compressor, log } = input;
@@ -42,21 +53,23 @@ export class IdempotentTransformer {
     return IdempotentTransformer.instance;
   }
 
-  makeIdempotent<T extends Record<string, (input: any) => Promise<any>>>(
+  makeIdempotent<T extends Record<string, (...args: any[]) => Promise<any>>>(
     workflowId: string,
     functions: T,
     options: IdempotentTransformerOptions = {
       ttl: 1000 * 60 * 60,
     }
   ): MakeIdempotentResult<T> {
-    const callbacks = functions as Record<string, (input: any) => Promise<any>>;
+    const callbacks = functions as Record<string, (...args: any[]) => Promise<any>>;
 
     const result = {} as MakeIdempotentResult<T>;
 
-    for (const key of Object.keys(callbacks)) {
-      result[key as keyof T] = this.createTransformer(workflowId, callbacks[key], {
+    for (const key of Object.keys(callbacks) as Array<keyof T>) {
+      // The type of callbacks[key] is T[key], which is (...args: any[]) => Promise<any>
+      // We need to ensure the result[key] is of type (...args: [...Parameters<T[key]>, (IOptions | undefined)?]) => Promise<ReturnType<T[key]>>
+      result[key] = this.createTransformer(workflowId, key as string, callbacks[key as string], {
         ttl: options.ttl,
-      });
+      }) as MakeIdempotentResult<T>[typeof key];
     }
 
     return result;
@@ -92,26 +105,38 @@ export class IdempotentTransformer {
    * @returns An IdempotentTransformer instance
    */
   private createTransformer =
-    <T>(
+    <F extends (...args: any[]) => Promise<any>>(
       workflowId: string,
-      callbackFn: (input: T) => Promise<T>,
+      contextName: string,
+      callbackFn: F,
       { ttl }: IdempotentTransformerOptions
     ) =>
     /**
      * The transformeed task
      * @param input - The input to the task
-     * @param idempotencyKey - The idempotency key (Must be unique for each task inside workflow)
      * @param options - The options for the transformer
      * @returns The result of the transformation function
      */
-    async (input: T, idempotencyKey: IdempotencyKey, options?: IOptions): Promise<T> => {
-      this.logger.debug(`Creating transformer for workflow ${workflowId}`);
+    async (...args: [...Parameters<F>, IOptions?]): Promise<ReturnType<F>> => {
+      const isLastArgOptions = this.isLastArgOptions(args);
+      let input: Parameters<F>;
+      let options: IOptions | undefined;
+      if (isLastArgOptions) {
+        options = args.pop() as IOptions;
+        input = args as unknown as Parameters<F>;
+      } else {
+        input = args as unknown as Parameters<F>;
+      }
+
+      this.logger.debug(
+        `Creating transformer for workflow ${workflowId} and context ${contextName}`
+      );
       /**
        * The task unique id is a hash of the workflow id and the idempotency key.
        */
       const taskUniqueId = await this.createHash({
         workflowId,
-        idempotencyKey,
+        contextName,
       });
       /**
        * The input hash is a hash of the input.
@@ -125,7 +150,7 @@ export class IdempotentTransformer {
         this.logger.debug(`Found cached result for task ${taskUniqueId}`);
         const decompressedResult = await this.decompressIfCompressed(cachedResult);
         const deserializedResult =
-          await this.serializer.deserialize<IdempotencyResult<T>>(decompressedResult);
+          await this.serializer.deserialize<IdempotencyResult<ReturnType<F>>>(decompressedResult);
         if (deserializedResult.executionInputHash !== inputHash) {
           this.logger.debug(`Input hash mismatch for task ${taskUniqueId}`);
           throw new IdempotencyConflictException();
@@ -134,10 +159,10 @@ export class IdempotentTransformer {
         return deserializedResult.executionResult;
       }
 
-      const result = await callbackFn(input);
+      const result = await callbackFn(...input);
 
       this.logger.debug(`Execution was sucessful, saving result to storage`);
-      const idempotentResult: IdempotencyResult<T> = {
+      const idempotentResult: IdempotencyResult<ReturnType<F>> = {
         executionResult: result,
         executionInputHash: inputHash,
       };

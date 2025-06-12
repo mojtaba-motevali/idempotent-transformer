@@ -19,3 +19,10 @@ The library shall wrap any asynchronous task and guarantee that the original tas
         When I execute 2 tasks successfully and third one fails
         Then I retry execution of the all tasks  
         Then the task should execute successfully and all tasks should have been executed only once
+    
+    Scenario: Workflow within a workflow
+        Given a workflow that includes multiple tasks that one of the includes multiple other tasks
+        When I execute second task of the inner workflow and fails
+        Then I retry the outer workflow to recover from the failure
+        Then the already successfully executed tasks must not re-execute and outer workflow must successfully finish.
+        

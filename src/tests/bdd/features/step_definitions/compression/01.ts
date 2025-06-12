@@ -1,7 +1,6 @@
 import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
-import { IdempotencyKey } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-key.interface';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
 import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
 import { Repository } from '../../../../../adapters/redis';
@@ -11,11 +10,11 @@ import { faker } from '@faker-js/faker';
 import { IdempotencyResult } from '../../../../../lib/idempotent-transformer/interfaces/idempotency-result.interface';
 
 let transformer: IdempotentTransformer;
-let wrappedTask: (input: any, key: IdempotencyKey, options?: IOptions) => Promise<any>;
+let wrappedTask: (input: string, input2: number, options?: IOptions) => Promise<any>;
 let storage: Repository;
 const taskInput = faker.lorem.sentence();
+const taskInput2 = faker.number.int();
 const taskResult = faker.lorem.sentence();
-const idempotencyKey: IdempotencyKey = { key: faker.string.uuid() };
 let taskUniqueId: string;
 const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
@@ -36,18 +35,18 @@ Given('compression is enabled', async function () {
 });
 
 Given('a task result "Hello, world!" is ready to be persisted', async function () {
-  const asyncTask = async (input: any) => taskResult;
+  const asyncTask = async (input: string, input2: number) => taskResult;
   const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
   wrappedTask = wrapped.task;
 });
 
 When('the task result is serialized and persisted to the state store', async function () {
   // Persist the result with compression enabled
-  await wrappedTask(taskInput, idempotencyKey, { shouldCompress: true });
+  await wrappedTask(taskInput, taskInput2, { shouldCompress: true });
   // Compute the taskUniqueId for direct state store access
   taskUniqueId = await transformer.createHash({
     workflowId,
-    idempotencyKey,
+    functionName: 'task',
   });
 });
 
