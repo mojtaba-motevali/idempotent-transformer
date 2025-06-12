@@ -10,7 +10,6 @@ import { IdempotencyConflictException } from '../../../../../lib/idempotent-tran
 
 let transformer: IdempotentTransformer;
 let asyncTask: (input: any) => Promise<any>;
-const taskIdempotencyKey = faker.string.uuid();
 const workflowId = faker.string.uuid();
 const input = faker.string.uuid();
 const storage = new Repository('redis://localhost:6379');
@@ -38,12 +37,9 @@ When(
   'I wrap the task with the idempotent execution wrapper and I execute the wrapped task with parameter "A" successfully',
   async () => {
     const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
-    await wrapped.task(
-      {
-        input,
-      },
-      { key: taskIdempotencyKey }
-    );
+    await wrapped.task({
+      input,
+    });
   }
 );
 
@@ -53,12 +49,9 @@ Then(
     const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
     let error: unknown;
     try {
-      await wrapped.task(
-        {
-          input: faker.string.uuid(),
-        },
-        { key: taskIdempotencyKey }
-      );
+      await wrapped.task({
+        input: faker.string.uuid(),
+      });
     } catch (err) {
       error = err;
     }

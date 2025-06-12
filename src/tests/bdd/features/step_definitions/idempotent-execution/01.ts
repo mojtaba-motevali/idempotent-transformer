@@ -1,7 +1,6 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
-import { IdempotencyKey } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-key.interface';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
 import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
 import { Repository } from '../../../../../adapters/redis';
@@ -10,13 +9,12 @@ import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
 
 let transformer: IdempotentTransformer;
-let wrappedTask: (input: any, key: IdempotencyKey, options?: IOptions) => Promise<any>;
+let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
 let asyncTask: (input: any) => Promise<any>;
 let firstResult: any;
 let secondResult: any;
 let input = faker.string.uuid();
 let storage: Repository;
-const idempotencyKey = faker.string.uuid();
 const workflowId = faker.string.uuid();
 let taskExecutionCount = 0;
 let currentDate = new Date();
@@ -57,12 +55,9 @@ When('I wrap the task with the idempotent execution wrapper', async function () 
 });
 
 When('I execute the wrapped task', async function () {
-  firstResult = await wrappedTask(
-    {
-      input,
-    },
-    { key: idempotencyKey }
-  );
+  firstResult = await wrappedTask({
+    input,
+  });
 });
 
 Then('the task should execute successfully and the result should be returned', async function () {
@@ -75,12 +70,9 @@ Then('the task should execute successfully and the result should be returned', a
 });
 
 When('I execute the wrapped task again', async function () {
-  secondResult = await wrappedTask(
-    {
-      input,
-    },
-    { key: idempotencyKey }
-  );
+  secondResult = await wrappedTask({
+    input,
+  });
 });
 
 Then(

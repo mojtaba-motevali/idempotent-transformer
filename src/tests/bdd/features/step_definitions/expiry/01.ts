@@ -1,7 +1,6 @@
 import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
-import { IdempotencyKey } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-key.interface';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
 import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
 import { Repository } from '../../../../../adapters/redis';
@@ -10,11 +9,10 @@ import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
 
 let transformer: IdempotentTransformer;
-let wrappedTask: (input: any, key: IdempotencyKey, options?: IOptions) => Promise<any>;
+let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
 let storage: Repository;
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
-const idempotencyKey: IdempotencyKey = { key: faker.string.uuid() };
 let taskUniqueId: string;
 const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
@@ -42,10 +40,10 @@ Given('a task result "Hello, world!" is ready to be persisted S1', async functio
 });
 
 When('the task result is serialized and persisted to the state store S1', async function () {
-  await wrappedTask(taskInput, idempotencyKey);
+  await wrappedTask(taskInput);
   taskUniqueId = await transformer.createHash({
     workflowId,
-    idempotencyKey,
+    contextName: 'task',
   });
 });
 
