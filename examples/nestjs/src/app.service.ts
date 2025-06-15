@@ -2,12 +2,14 @@ import { IdempotentTransformer } from '@idempotent-transformer/core';
 import { IDEMPOTENT_TRANSFORMER } from '@idempotent-transformer/nestjs';
 import { Inject, Injectable } from '@nestjs/common';
 import { appendFile, readFile } from 'fs';
+import { ExampleService } from './example/example.service';
 
 @Injectable()
 export class AppService {
   constructor(
     @Inject(IDEMPOTENT_TRANSFORMER)
     private readonly idempotent: IdempotentTransformer,
+    private readonly exampleService: ExampleService,
   ) {}
 
   async writeFile(path: string, data: string): Promise<boolean> {
@@ -33,12 +35,22 @@ export class AppService {
     });
   }
 
-  async writeJSON(actionId: string, data: any): Promise<string> {
+  async writeJSON(actionId: string, data: { name: string }): Promise<string> {
     const idempotent = this.idempotent.makeIdempotent(actionId, {
-      writeFile: this.writeFile,
+      writeFile: (...args: Parameters<typeof this.writeFile>) =>
+        this.writeFile(...args),
+      ping: (...args: Parameters<typeof this.exampleService.ping>) =>
+        this.exampleService.ping(...args),
     });
-    const path = `${data.name}.json`;
-    const json = JSON.stringify(data);
+    const path = `public/${data.name}.json`;
+    const ping = await idempotent.ping({
+      shouldCompress: true,
+    });
+    const json = JSON.stringify({
+      ...data,
+      randomId: ping,
+    });
+
     await idempotent.writeFile(path, json, {
       shouldCompress: true,
     });

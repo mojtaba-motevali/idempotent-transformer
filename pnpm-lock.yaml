@@ -60,26 +60,26 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
 
-  apps/bdd:
+  bdd_tests:
     dependencies:
       '@idempotent-transformer/adapter-crypto':
         specifier: workspace:*
-        version: link:../../packages/adapter-crypto
+        version: link:../packages/adapter-crypto
       '@idempotent-transformer/adapter-message-pack':
         specifier: workspace:*
-        version: link:../../packages/adapter-message-pack
+        version: link:../packages/adapter-message-pack
       '@idempotent-transformer/adapter-redis':
         specifier: workspace:*
-        version: link:../../packages/adapter-redis
+        version: link:../packages/adapter-redis
       '@idempotent-transformer/adapter-zstd':
         specifier: workspace:*
-        version: link:../../packages/adapter-zstd
+        version: link:../packages/adapter-zstd
       '@idempotent-transformer/base':
         specifier: workspace:*
-        version: link:../../packages/base
+        version: link:../packages/base
       '@idempotent-transformer/core':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../packages/core
     devDependencies:
       '@types/jest':
         specifier: ^29.5.14
@@ -94,7 +94,7 @@ importers:
         specifier: ^29.3.4
         version: 29.4.0(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@22.15.31)(ts-node@10.9.2(@swc/core@1.12.1)(@types/node@22.15.31)(typescript@5.8.3)))(typescript@5.8.3)
 
-  apps/nestjs:
+  examples/nestjs:
     dependencies:
       '@idempotent-transformer/adapter-crypto':
         specifier: workspace:*
