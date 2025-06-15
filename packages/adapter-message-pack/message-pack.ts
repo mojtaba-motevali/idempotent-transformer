@@ -1,10 +1,13 @@
 import { addExtension, Packr } from 'msgpackr';
-import { IdempotentSerializer, Serializable } from '../core';
-import { TSerialized } from '../core/base/types/serialized.type';
-import { SERIALIZE_NAME_METADATA_KEY } from '../core';
-import { ModelIsNotDecoratedException } from '../core/base/serializer/errors/model-is-not-decorated.exception';
-import { throwIfTrue } from '../core/base/serializer/lib/throw-if-true';
-import { MethodNotImplementedException } from '../core/base/serializer/errors/method-not-implemented.exception';
+import {
+  IdempotentSerializer,
+  Serializable,
+  SERIALIZE_NAME_METADATA_KEY,
+} from '@idempotent-transformer/base';
+import { TSerialized } from '@idempotent-transformer/base/types/serialized.type';
+import { ModelIsNotDecoratedException } from '@idempotent-transformer/base/serializer/errors/model-is-not-decorated.exception';
+import { throwIfTrue } from '@idempotent-transformer/base/serializer/lib/throw-if-true';
+import { MethodNotImplementedException } from '@idempotent-transformer/base/serializer/errors/method-not-implemented.exception';
 
 export class MessagePack extends IdempotentSerializer {
   private static instance: MessagePack;

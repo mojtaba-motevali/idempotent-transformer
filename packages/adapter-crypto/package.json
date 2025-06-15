@@ -8,6 +8,9 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "^0.1.0"
+    "@idempotent-transformer/base": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.20"
   }
 }

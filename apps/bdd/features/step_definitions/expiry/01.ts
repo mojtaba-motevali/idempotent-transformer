@@ -1,14 +1,14 @@
 import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { IdempotentTransformer } from '../../../../../packages/core/idempotent-transformer';
-import { IOptions } from '../../../../../packages/core/idempotent-transformer/interfaces/idempotent-options.interface';
-import { RedisAdapter } from '../../../../../packages/adapter-redis/redis';
-import { MessagePack } from '../../../../../packages/adapter-message-pack/message-pack';
-import { ZstdCompressor } from '../../../../../packages/adapter-zstd/zstd-compressor';
+import { IdempotentTransformer, IIdempotentTaskOptions } from '@idempotent-transformer/core';
+import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
+import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
+import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
 import { faker } from '@faker-js/faker';
-import { IdempotentFactory } from '../../../../../packages/core/factory/idempotent-factory';
+import { IdempotentFactory } from '@idempotent-transformer/core';
+import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
 
-let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
+let wrappedTask: (input: any, options?: IIdempotentTaskOptions) => Promise<any>;
 let storage: RedisAdapter;
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
@@ -24,6 +24,7 @@ BeforeAll(async () => {
     serializer: MessagePack.getInstance(),
     compressor,
     logger: null,
+    crypto: new Md5Adapter(),
   });
 });
 

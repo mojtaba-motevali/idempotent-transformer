@@ -1,1 +1,1 @@
-export { ZstdCompressor } from './zstd-compressor';
+export { ZstdCompressor } from './src';

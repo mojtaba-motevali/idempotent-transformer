@@ -1,12 +1,15 @@
 import { AfterAll, BeforeAll, Given, Then, When } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { RedisAdapter } from '../../../../../packages/adapter-redis/redis';
-import { MessagePack } from '../../../../../packages/adapter-message-pack/message-pack';
-import { ZstdCompressor } from '../../../../../packages/adapter-zstd/zstd-compressor';
+import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
+import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
+import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
 import { faker } from '@faker-js/faker';
-import { IdempotencyConflictException } from '../../../../../packages/core/idempotent-transformer/exceptions/conflict.exception';
-import { IdempotentFactory } from '../../../../../packages/core/factory/idempotent-factory';
-import { IdempotentTransformer } from '../../../../../packages/core/idempotent-transformer';
+import {
+  IdempotentFactory,
+  IdempotentTransformer,
+  IdempotencyConflictException,
+} from '@idempotent-transformer/core';
+import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
 
 let asyncTask: (input: any) => Promise<any>;
 const workflowId = faker.string.uuid();
@@ -19,6 +22,7 @@ BeforeAll(async () => {
     serializer: MessagePack.getInstance(),
     compressor: new ZstdCompressor(),
     logger: null,
+    crypto: new Md5Adapter(),
   });
 });
 

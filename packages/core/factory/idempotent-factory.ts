@@ -1,10 +1,8 @@
-import { Md5Adapter } from '../../adapter-crypto/crypto';
-import { MessagePack } from '../../adapter-message-pack/message-pack';
-import { IdempotentCompressor } from '../base/compressor';
-import { IdempotentCrypto } from '../base/crypto';
-import { IdempotentLogger } from '../base/logger';
-import { IdempotentSerializer } from '../base/serializer';
-import { IdempotentStateStore } from '../base/state-store';
+import { IdempotentCompressor } from '@idempotent-transformer/base/compressor';
+import { IdempotentCrypto } from '@idempotent-transformer/base/crypto';
+import { IdempotentLogger } from '@idempotent-transformer/base/logger';
+import { IdempotentSerializer } from '@idempotent-transformer/base/serializer';
+import { IdempotentStateStore } from '@idempotent-transformer/base/state-store';
 import { IdempotentTransformer } from '../idempotent-transformer';
 import { ConsoleLogger } from '../logger/console-logger';
 
@@ -13,16 +11,16 @@ export interface IdempotentFactoryOptions {
   logger?: IdempotentLogger | null;
   serializer: IdempotentSerializer;
   compressor?: IdempotentCompressor;
-  crypto?: IdempotentCrypto;
+  crypto: IdempotentCrypto;
 }
 
 export class IdempotentFactory {
   public static async build({
     storage,
     logger = new ConsoleLogger(),
-    serializer = MessagePack.getInstance(),
+    serializer,
     compressor,
-    crypto = new Md5Adapter(),
+    crypto,
   }: IdempotentFactoryOptions) {
     if (!(await storage.isConnected())) {
       await storage.connect();

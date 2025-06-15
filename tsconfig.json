@@ -14,6 +14,8 @@
     "rootDir": "."
   },
   "lib": ["ES2024", "DOM"], // Used by @msgpack/msgpack
-  "include": ["src/**/*", "tests"],
+  "include": [
+    "packages/**/*",
+  ],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 } 

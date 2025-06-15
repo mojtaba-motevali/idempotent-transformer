@@ -8,6 +8,11 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "^0.1.0"
+    "@idempotent-transformer/base": "workspace:*",
+    "msgpackr": "^1.11.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.20",
+    "@types/mocha": "^10.0.10"
   }
 }

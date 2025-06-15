@@ -1,12 +1,12 @@
-import { IdempotentCompressor } from '../base/compressor';
-import { IdempotentCrypto } from '../base/crypto';
-import { IdempotentLogger } from '../base/logger';
-import { IdempotentSerializer } from '../base/serializer';
-import { IdempotentStateStore } from '../base/state-store';
-import { TSerialized } from '../base/types/serialized.type';
+import { IdempotentCompressor } from '@idempotent-transformer/base/compressor';
+import { IdempotentCrypto } from '@idempotent-transformer/base/crypto';
+import { IdempotentLogger } from '@idempotent-transformer/base/logger';
+import { IdempotentSerializer } from '@idempotent-transformer/base/serializer';
+import { IdempotentStateStore } from '@idempotent-transformer/base/state-store';
+import { TSerialized } from '@idempotent-transformer/base/types/serialized.type';
 import { IdempotencyConflictException } from './exceptions/conflict.exception';
 import { IdempotencyResult } from './interfaces/idempotency-result.interface';
-import { IOptions } from './interfaces/idempotent-options.interface';
+import { IIdempotentTaskOptions } from './interfaces/idempotent-options.interface';
 import { IdempotentTransformerInput } from './interfaces/idempotent-transformer.interface';
 import {
   IdempotentTransformerOptions,
@@ -38,7 +38,7 @@ export class IdempotentTransformer {
     if (!args.length) return false;
     const lastArg = args[args.length - 1];
     if (typeof lastArg !== 'object' || lastArg === null) return false;
-    const optionKeys: (keyof IOptions)[] = ['shouldCompress'];
+    const optionKeys: (keyof IIdempotentTaskOptions)[] = ['shouldCompress'];
     return optionKeys.some((key) => key in lastArg);
   }
 
@@ -127,12 +127,12 @@ export class IdempotentTransformer {
      * @param options - The options for the transformer
      * @returns The result of the transformation function
      */
-    async (...args: [...Parameters<F>, IOptions?]): Promise<ReturnType<F>> => {
+    async (...args: [...Parameters<F>, IIdempotentTaskOptions?]): Promise<ReturnType<F>> => {
       const isLastArgOptions = this.isLastArgOptions(args);
       let input: Parameters<F>;
-      let options: IOptions | undefined;
+      let options: IIdempotentTaskOptions | undefined;
       if (isLastArgOptions) {
-        options = args.pop() as IOptions;
+        options = args.pop() as IIdempotentTaskOptions;
         input = args as unknown as Parameters<F>;
       } else {
         input = args as unknown as Parameters<F>;
