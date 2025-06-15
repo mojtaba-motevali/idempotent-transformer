@@ -17,7 +17,7 @@ const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
 
 BeforeAll(async () => {
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
@@ -26,12 +26,11 @@ BeforeAll(async () => {
 });
 
 Given('no TTL is configured for state entries S2', async function () {
-  const asyncTask = async (input: any) => taskResult;
   // No TTL option passed
   const wrapped = IdempotentTransformer.getInstance().makeIdempotent(
     workflowId,
     {
-      task: asyncTask,
+      task: async (input: any) => taskResult,
     },
     { ttl: null }
   );

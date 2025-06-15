@@ -27,7 +27,7 @@ let outerWorkflowTasks: {
 };
 
 BeforeAll(async () => {
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor: new ZstdCompressor(),

@@ -18,7 +18,7 @@ let retrievedResult: string;
 
 BeforeAll(async () => {
   storage = new RedisAdapter('redis://localhost:6379');
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,

@@ -14,7 +14,7 @@ const input = faker.string.uuid();
 const storage = new RedisAdapter('redis://localhost:6379');
 
 BeforeAll(async () => {
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor: new ZstdCompressor(),

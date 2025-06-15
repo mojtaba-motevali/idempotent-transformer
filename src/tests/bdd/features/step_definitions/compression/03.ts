@@ -12,14 +12,13 @@ let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
 let storage: RedisAdapter;
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
-let taskUniqueId: string;
 const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
 let retrievedResult: string;
 
 BeforeAll(async () => {
   storage = new RedisAdapter('redis://localhost:6379');
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
@@ -33,15 +32,11 @@ Given('compression is now enabled in the library configuration', async function 
 
 Given('an uncompressed task result was previously stored in the state store', async function () {
   // Store the result without compression
-  const asyncTask = async (input: any) => taskResult;
   const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
-    task: asyncTask,
+    task: async (input: any) => taskResult,
   });
   wrappedTask = wrapped.task;
   await wrappedTask(taskInput, { shouldCompress: false });
-  taskUniqueId = await IdempotentTransformer.getInstance().createHash({
-    workflowId,
-  });
 });
 
 When(

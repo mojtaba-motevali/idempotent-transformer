@@ -28,7 +28,7 @@ export class IdempotentFactory {
       await storage.connect();
     }
     serializer.configure();
-    IdempotentTransformer.getInstance({
+    IdempotentTransformer.configure({
       storage,
       log: logger ?? undefined,
       serializer,

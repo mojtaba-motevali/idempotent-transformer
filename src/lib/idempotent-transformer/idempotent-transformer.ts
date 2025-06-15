@@ -39,7 +39,7 @@ export class IdempotentTransformer {
     const lastArg = args[args.length - 1];
     if (typeof lastArg !== 'object' || lastArg === null) return false;
     const optionKeys: (keyof IOptions)[] = ['shouldCompress'];
-    return Object.keys(optionKeys).some((key) => key in lastArg);
+    return optionKeys.some((key) => key in lastArg);
   }
 
   static configure(input: IdempotentTransformerInput) {
@@ -59,7 +59,7 @@ export class IdempotentTransformer {
     }
     if (!IdempotentTransformer.instance) {
       throw new Error(
-        'IdempotentTransformer not configured, make sure you have used IdempotentFactory.build() to configure the transformer.'
+        'IdempotentTransformer not configured, make sure you have used IdempotentFactory.build() to configure the transformer'
       );
     }
     return IdempotentTransformer.instance;
@@ -161,6 +161,7 @@ export class IdempotentTransformer {
         const decompressedResult = await this.decompressIfCompressed(cachedResult);
         const deserializedResult =
           await this.serializer?.deserialize<IdempotencyResult<ReturnType<F>>>(decompressedResult);
+
         if (deserializedResult.executionInputHash !== inputHash) {
           this.logger?.debug(`Input hash mismatch for task ${taskUniqueId}`);
           throw new IdempotencyConflictException();

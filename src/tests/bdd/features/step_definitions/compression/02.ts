@@ -20,7 +20,7 @@ let retrievedResult: string;
 
 BeforeAll(async () => {
   storage = new RedisAdapter('redis://localhost:6379');
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
@@ -33,9 +33,8 @@ Given('compression is enabled in the library configuration', async function () {
 });
 
 Given('a compressed task result is stored in the state store', async function () {
-  const asyncTask = async (input: any) => taskResult;
   const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
-    task: asyncTask,
+    task: async (input: any) => taskResult,
   });
   wrappedTask = wrapped.task;
   // Persist the result with compression enabled

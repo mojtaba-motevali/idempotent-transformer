@@ -33,7 +33,7 @@ const idempotentWorkflowKey = faker.string.uuid();
 const storage: RedisAdapter = new RedisAdapter('redis://localhost:6379');
 
 BeforeAll(async () => {
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor: new ZstdCompressor(),

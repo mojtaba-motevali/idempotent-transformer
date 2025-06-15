@@ -2,14 +2,12 @@ import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
-import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
 import { RedisAdapter } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '../../../../../lib/factory/idempotent-factory';
 
-let transformer: IdempotentTransformer;
 let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
 let storage: RedisAdapter;
 const taskInput = faker.lorem.sentence();
@@ -21,7 +19,7 @@ const ttlMs = 2000; // 2 seconds
 
 BeforeAll(async () => {
   storage = new RedisAdapter('redis://localhost:6379');
-  IdempotentFactory.build({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
@@ -30,11 +28,10 @@ BeforeAll(async () => {
 });
 
 Given('a TTL of 2 seconds is configured for state entries S1', async function () {
-  const asyncTask = async (input: any) => taskResult;
   const wrapped = IdempotentTransformer.getInstance().makeIdempotent(
     workflowId,
     {
-      task: asyncTask,
+      task: async (input: any) => taskResult,
     },
     { ttl: ttlMs }
   );
