@@ -2,15 +2,15 @@ import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
-import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
-import { Repository } from '../../../../../adapters/redis';
+import { RedisAdapter } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
+import { IdempotentFactory } from '../../../../../lib/factory/idempotent-factory';
 
 let transformer: IdempotentTransformer;
 let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
-let storage: Repository;
+let storage: RedisAdapter;
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
 let taskUniqueId: string;
@@ -19,13 +19,12 @@ const compressor = new ZstdCompressor();
 let retrievedResult: string;
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
-  await storage.initialize();
-  transformer = IdempotentTransformer.getInstance({
+  storage = new RedisAdapter('redis://localhost:6379');
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
-    log: new ConsoleLogger(),
+    logger: null,
   });
 });
 
@@ -34,13 +33,14 @@ Given('compression is enabled in the library configuration', async function () {
 });
 
 Given('a compressed task result is stored in the state store', async function () {
-  const asyncTask = async (input: any) => taskResult;
-  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
+  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+    task: async (input: any) => taskResult,
+  });
   wrappedTask = wrapped.task;
   // Persist the result with compression enabled
   await wrappedTask(taskInput, { shouldCompress: true });
   // Compute the taskUniqueId for direct state store access
-  taskUniqueId = await transformer.createHash({
+  taskUniqueId = await IdempotentTransformer.getInstance().createHash({
     workflowId,
   });
 });
@@ -58,5 +58,5 @@ Then("retrieved result should match the original task's result.", async function
 });
 
 AfterAll(async () => {
-  await storage.destroy();
+  await storage.disconnect();
 });

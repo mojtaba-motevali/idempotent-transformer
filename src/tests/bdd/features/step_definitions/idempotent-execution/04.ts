@@ -1,19 +1,18 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
-import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
-import { Repository } from '../../../../../adapters/redis';
+import { RedisAdapter } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
+import { IdempotentFactory } from '../../../../../lib/factory/idempotent-factory';
 
-let transformer: IdempotentTransformer;
 let retryCount = 0;
 let workflowExecution = [0, 0, 0, 0, 0, 0, 0];
 
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
-const storage: Repository = new Repository('redis://localhost:6379');
+const storage: RedisAdapter = new RedisAdapter('redis://localhost:6379');
 
 let innerWorkflowTasks: {
   task5: () => Promise<any>;
@@ -28,13 +27,11 @@ let outerWorkflowTasks: {
 };
 
 BeforeAll(async () => {
-  await storage.initialize();
-
-  transformer = IdempotentTransformer.getInstance({
+  await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor: new ZstdCompressor(),
-    log: new ConsoleLogger(),
+    logger: null,
   });
 });
 
@@ -62,11 +59,14 @@ Given(
         return input;
       },
       task2: async () => {
-        const { task5, task6, task7 } = transformer.makeIdempotent(idempotentWorkflowKey, {
-          task5: innerWorkflowTasks.task5,
-          task6: innerWorkflowTasks.task6,
-          task7: innerWorkflowTasks.task7,
-        });
+        const { task5, task6, task7 } = IdempotentTransformer.getInstance().makeIdempotent(
+          idempotentWorkflowKey,
+          {
+            task5: innerWorkflowTasks.task5,
+            task6: innerWorkflowTasks.task6,
+            task7: innerWorkflowTasks.task7,
+          }
+        );
         const result = await task5({
           shouldCompress: true,
         });
@@ -87,7 +87,7 @@ Given(
   }
 );
 When('I execute second task of the inner workflow and fails', async function () {
-  const wrapped = transformer.makeIdempotent(idempotentWorkflowKey, {
+  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
     task1: outerWorkflowTasks.task1,
     task3: outerWorkflowTasks.task3,
     task4: outerWorkflowTasks.task4,
@@ -106,7 +106,7 @@ When('I execute second task of the inner workflow and fails', async function () 
 
 Then('I retry the outer workflow to recover from the failure', async function () {
   ++retryCount;
-  const wrapped = transformer.makeIdempotent(idempotentWorkflowKey, {
+  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
     task1: outerWorkflowTasks.task1,
     task3: outerWorkflowTasks.task3,
     task4: outerWorkflowTasks.task4,
@@ -131,5 +131,5 @@ Then(
 );
 
 AfterAll(async () => {
-  await storage.destroy();
+  await storage.disconnect();
 });

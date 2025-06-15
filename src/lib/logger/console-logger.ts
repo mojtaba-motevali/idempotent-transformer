@@ -1,6 +1,6 @@
-import { Logger } from '../base/logger';
+import { IdempotentLogger } from '../base/logger';
 
-export class ConsoleLogger extends Logger {
+export class ConsoleLogger extends IdempotentLogger {
   error(message: string): void {}
 
   debug(message: string): void {}

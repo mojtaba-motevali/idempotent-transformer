@@ -1,29 +1,27 @@
 import { addExtension, Packr } from 'msgpackr';
-import { Serializer } from '../../lib/base/serializer';
+import { IdempotentSerializer, Serializable } from '../../lib';
 import { TSerialized } from '../../lib/base/types/serialized.type';
-import { Serializable } from './message-pack.interface';
-import { decoratedModels, SERIALIZE_NAME_METADATA_KEY } from './decorators/serialize.decorator';
-import { ModelIsNotDecoratedException } from './errors/model-is-not-decorated.exception';
-import { throwIfTrue } from './lib/throw-if-true';
-import { MethodNotImplementedException } from './errors/method-not-implemented.exception';
+import { SERIALIZE_NAME_METADATA_KEY } from '../../lib';
+import { ModelIsNotDecoratedException } from '../../lib/base/serializer/errors/model-is-not-decorated.exception';
+import { throwIfTrue } from '../../lib/base/serializer/lib/throw-if-true';
+import { MethodNotImplementedException } from '../../lib/base/serializer/errors/method-not-implemented.exception';
 
-let extPackr = new Packr({
-  encodeUndefinedAsNil: false,
-  mapAsEmptyObject: false,
-  setAsEmptyObject: false,
-  moreTypes: true,
-});
-
-export class MessagePack extends Serializer {
+export class MessagePack extends IdempotentSerializer {
   private static instance: MessagePack;
+  private extPackr: Packr;
 
   private constructor() {
     super();
-    this.init();
+    this.extPackr = new Packr({
+      encodeUndefinedAsNil: false,
+      mapAsEmptyObject: false,
+      setAsEmptyObject: false,
+      moreTypes: true,
+    });
   }
 
-  private init() {
-    Array.from(decoratedModels.values()).forEach((Model: any) => {
+  configure() {
+    Array.from(IdempotentSerializer.decoratedModels.values()).forEach((Model: any) => {
       addExtension({
         type: 1,
         Class: Model,
@@ -36,7 +34,7 @@ export class MessagePack extends Serializer {
         read: (data) => {
           const key = data[0];
           const value = data[1];
-          const Model = decoratedModels.get(key) as unknown as Serializable;
+          const Model = IdempotentSerializer.decoratedModels.get(key) as unknown as Serializable;
           throwIfTrue(!Model, new ModelIsNotDecoratedException(key));
           throwIfTrue(!Model.fromJSON, new MethodNotImplementedException('fromJSON'));
           return Model.fromJSON(value);
@@ -53,7 +51,7 @@ export class MessagePack extends Serializer {
   }
 
   serialize = async <T>(data: T): Promise<TSerialized> => {
-    const encoded = extPackr.pack(data);
+    const encoded = this.extPackr.pack(data);
     return encoded;
   };
 
@@ -68,7 +66,7 @@ export class MessagePack extends Serializer {
       throw new Error('Input data must be either a Blob or Uint8Array');
     }
 
-    const decoded = extPackr.unpack(buffer);
+    const decoded = this.extPackr.unpack(buffer);
 
     return decoded as T;
   };
