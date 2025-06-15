@@ -1,6 +1,5 @@
 import { zstdCompress, zstdDecompress } from 'node:zlib';
-import { IdempotentCompressor } from '@idempotent-transformer/base';
-import { TSerialized } from '@idempotent-transformer/base';
+import { IdempotentCompressor, TSerialized } from '@idempotent-transformer/base';
 
 export class ZstdCompressor extends IdempotentCompressor {
   private readonly magic = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);

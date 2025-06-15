@@ -1,6 +1,5 @@
-import { IdempotentCrypto } from '@idempotent-transformer/base/crypto';
+import { IdempotentCrypto, TSerialized } from '@idempotent-transformer/base';
 import { createHash } from 'crypto';
-import { TSerialized } from '@idempotent-transformer/base/types/serialized.type';
 
 export class Md5Adapter extends IdempotentCrypto {
   async createHash(value: TSerialized): Promise<string> {

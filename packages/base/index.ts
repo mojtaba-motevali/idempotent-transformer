@@ -6,6 +6,7 @@ export {
   Serialize,
   SERIALIZE_NAME_METADATA_KEY,
   Serializable,
+  SerializationContractViolatedException,
 } from './serializer';
 export { TSerialized } from './types/serialized.type';
-export { IdempotentStateStore } from './state-store';
+export { IdempotentStateStore, IStateStoreOptions } from './state-store';

@@ -11,7 +11,7 @@
     "clean": "rimraf dist",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:bdd": "cucumber-js -c cucumber.json",
+    "test:bdd": "pnpm --filter @idempotent-transformer/bdd test",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "prepare": "npm run clean && npm run build",
