@@ -5,22 +5,41 @@ import {
   IdempotentTransformer,
 } from '@idempotent-transformer/core';
 
+export const IDEMPOTENT_MODULE_OPTIONS = 'IDEMPOTENT_MODULE_OPTIONS';
+
 export const IDEMPOTENT_TRANSFORMER = 'IDEMPOTENT_TRANSFORMER';
+
+interface IdempotentTransformerRegisterAsyncOptions {
+  useFactory: (...args: any[]) => Promise<IdempotentFactoryOptions>;
+  inject?: any[];
+  imports?: any[];
+}
 
 @Module({})
 export class IdempotentModule {
-  static async registerAsync(options: IdempotentFactoryOptions): Promise<DynamicModule> {
-    await IdempotentFactory.build(options);
+  static async registerAsync(
+    opts: IdempotentTransformerRegisterAsyncOptions
+  ): Promise<DynamicModule> {
+    const optionsProvider: Provider = {
+      provide: IDEMPOTENT_MODULE_OPTIONS,
+      useFactory: opts.useFactory,
+      inject: opts.inject || [],
+    };
 
-    const idempotentProvider: Provider = {
+    const transformerProvider: Provider = {
       provide: IDEMPOTENT_TRANSFORMER,
-      useValue: IdempotentTransformer.getInstance(), // Already configured statically by the factory
+      useFactory: async (options: IdempotentFactoryOptions) => {
+        await IdempotentFactory.build(options);
+        return IdempotentTransformer.getInstance();
+      },
+      inject: [IDEMPOTENT_MODULE_OPTIONS],
     };
 
     return {
       module: IdempotentModule,
-      providers: [idempotentProvider],
-      exports: [idempotentProvider],
+      imports: opts.imports || [],
+      providers: [optionsProvider, transformerProvider],
+      exports: [transformerProvider],
     };
   }
 }

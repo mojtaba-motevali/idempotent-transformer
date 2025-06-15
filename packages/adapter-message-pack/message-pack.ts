@@ -3,11 +3,9 @@ import {
   IdempotentSerializer,
   Serializable,
   SERIALIZE_NAME_METADATA_KEY,
+  TSerialized,
 } from '@idempotent-transformer/base';
-import { TSerialized } from '@idempotent-transformer/base/types/serialized.type';
-import { ModelIsNotDecoratedException } from '@idempotent-transformer/base/serializer/errors/model-is-not-decorated.exception';
-import { throwIfTrue } from '@idempotent-transformer/base/serializer/lib/throw-if-true';
-import { MethodNotImplementedException } from '@idempotent-transformer/base/serializer/errors/method-not-implemented.exception';
+import { ModelIsNotDecoratedException } from './errors';
 
 export class MessagePack extends IdempotentSerializer {
   private static instance: MessagePack;
@@ -31,15 +29,15 @@ export class MessagePack extends IdempotentSerializer {
         write: (object: unknown) => {
           const unBoxedObject = object as unknown as Serializable;
           const key: string = Model[SERIALIZE_NAME_METADATA_KEY];
-          throwIfTrue(!unBoxedObject.toJSON, new MethodNotImplementedException('toJSON'));
           return [key, unBoxedObject.toJSON()];
         },
         read: (data) => {
           const key = data[0];
           const value = data[1];
           const Model = IdempotentSerializer.decoratedModels.get(key) as unknown as Serializable;
-          throwIfTrue(!Model, new ModelIsNotDecoratedException(key));
-          throwIfTrue(!Model.fromJSON, new MethodNotImplementedException('fromJSON'));
+          if (!Model) {
+            throw new ModelIsNotDecoratedException(key);
+          }
           return Model.fromJSON(value);
         },
       });

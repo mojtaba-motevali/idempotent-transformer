@@ -1,8 +1,10 @@
-import { IdempotentCompressor } from '@idempotent-transformer/base/compressor';
-import { IdempotentCrypto } from '@idempotent-transformer/base/crypto';
-import { IdempotentLogger } from '@idempotent-transformer/base/logger';
-import { IdempotentSerializer } from '@idempotent-transformer/base/serializer';
-import { IdempotentStateStore } from '@idempotent-transformer/base/state-store';
+import {
+  IdempotentCompressor,
+  IdempotentCrypto,
+  IdempotentLogger,
+  IdempotentSerializer,
+  IdempotentStateStore,
+} from '@idempotent-transformer/base';
 
 export interface IdempotentTransformerInput {
   /**

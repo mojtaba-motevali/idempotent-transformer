@@ -1,17 +1,19 @@
-import { IdempotentCompressor } from '@idempotent-transformer/base/compressor';
-import { IdempotentCrypto } from '@idempotent-transformer/base/crypto';
-import { IdempotentLogger } from '@idempotent-transformer/base/logger';
-import { IdempotentSerializer } from '@idempotent-transformer/base/serializer';
-import { IdempotentStateStore } from '@idempotent-transformer/base/state-store';
-import { TSerialized } from '@idempotent-transformer/base/types/serialized.type';
-import { IdempotencyConflictException } from './exceptions/conflict.exception';
-import { IdempotencyResult } from './interfaces/idempotency-result.interface';
-import { IIdempotentTaskOptions } from './interfaces/idempotent-options.interface';
-import { IdempotentTransformerInput } from './interfaces/idempotent-transformer.interface';
 import {
+  IdempotentCompressor,
+  IdempotentCrypto,
+  IdempotentLogger,
+  IdempotentSerializer,
+  IdempotentStateStore,
+  TSerialized,
+} from '@idempotent-transformer/base';
+import { IdempotencyConflictException } from './exceptions/conflict.exception';
+import {
+  IdempotencyResult,
+  IdempotentTransformerInput,
   IdempotentTransformerOptions,
+  IIdempotentTaskOptions,
   MakeIdempotentResult,
-} from './interfaces/make-idempotent.interface';
+} from './interfaces';
 
 export class IdempotentTransformer {
   private static instance: IdempotentTransformer;

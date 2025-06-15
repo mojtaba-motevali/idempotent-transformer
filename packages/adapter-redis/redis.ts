@@ -1,5 +1,5 @@
 import { createClient, RedisClientOptions } from 'redis';
-import { IStateStoreOptions, IdempotentStateStore } from '@idempotent-transformer/base/state-store';
+import { IStateStoreOptions, IdempotentStateStore } from '@idempotent-transformer/base';
 
 export class RedisAdapter extends IdempotentStateStore {
   private client: ReturnType<typeof createClient>;
