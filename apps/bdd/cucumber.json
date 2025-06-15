@@ -1,8 +1,8 @@
 {
     "default": {
         "requireModule": ["ts-node/register"],
-        "require": ["apps/bdd/features/**/*.ts"],
-        "paths": ["apps/bdd/features/**/*.feature"],
+        "require": ["features/**/*.ts"],
+        "paths": ["features/**/*.feature"],
         "format": ["progress", "html:cucumber-report.html"],
         "formatOptions": {
             "snippetInterface": "async-await"

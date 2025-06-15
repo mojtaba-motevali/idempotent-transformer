@@ -5,7 +5,8 @@
     "types": "dist/index.d.ts",
     "files": ["dist"],
     "scripts": {
-      "build": "tsc"
+      "build": "tsc",
+      "test": "cucumber-js -c cucumber.json"
     },
     "dependencies": {
       "@idempotent-transformer/base": "workspace:*",
