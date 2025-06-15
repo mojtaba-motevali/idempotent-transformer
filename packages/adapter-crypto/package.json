@@ -1,0 +1,13 @@
+{
+  "name": "@idempotent-transformer/adapter-crypto",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@idempotent-transformer/core": "^0.1.0"
+  }
+}

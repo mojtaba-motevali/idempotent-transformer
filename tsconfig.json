@@ -11,9 +11,9 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "sourceMap": true,
-    "rootDir": "./src"
+    "rootDir": "."
   },
   "lib": ["ES2024", "DOM"], // Used by @msgpack/msgpack
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 } 

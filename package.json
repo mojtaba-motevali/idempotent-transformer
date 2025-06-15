@@ -12,11 +12,12 @@
     "clean": "rimraf dist",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:bdd": "cucumber-js -c cucumber.json src/tests/bdd",
+    "test:bdd": "cucumber-js -c cucumber.json",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "prepare": "npm run clean && npm run build",
-    "prepublishOnly": "npm test && npm run lint"
+    "prepublishOnly": "npm test && npm run lint",
+    "build:all": "pnpm install && pnpm -r run build"
   },
   "keywords": [
     "typescript",
@@ -48,5 +49,9 @@
     "@types/chai": "^4.3.11",
     "chai": "^4.3.10",
     "ts-node": "^10.9.2"
-  }
+  },
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
 }
