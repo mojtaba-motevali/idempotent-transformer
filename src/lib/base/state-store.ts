@@ -1,3 +1,5 @@
+import { TSerialized } from './types/serialized.type';
+
 export interface IStateStoreOptions {
   /**
    * The number of milliseconds when the task result will be considered expired.
@@ -11,11 +13,10 @@ export interface IStateStoreOptions {
   };
 }
 
-export abstract class StateStore {
-  abstract find(id: string): Promise<Uint8Array<ArrayBufferLike> | null>;
-  abstract save(
-    id: string,
-    value: Uint8Array<ArrayBufferLike>,
-    options: IStateStoreOptions
-  ): Promise<void>;
+export abstract class IdempotentStateStore {
+  abstract connect(): Promise<void>;
+  abstract disconnect(): Promise<void>;
+  abstract isConnected(): Promise<boolean>;
+  abstract find(id: string): Promise<TSerialized | null>;
+  abstract save(id: string, value: TSerialized, options: IStateStoreOptions): Promise<void>;
 }

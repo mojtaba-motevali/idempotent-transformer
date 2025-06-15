@@ -2,16 +2,16 @@ import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
-import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
-import { Repository } from '../../../../../adapters/redis';
+import { RedisAdapter } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
 import { IdempotencyResult } from '../../../../../lib/idempotent-transformer/interfaces/idempotency-result.interface';
+import { IdempotentFactory } from '../../../../../lib/factory/idempotent-factory';
+import { TSerialized } from '../../../../../lib/base/types/serialized.type';
 
-let transformer: IdempotentTransformer;
 let wrappedTask: (input: string, input2: number, options?: IOptions) => Promise<any>;
-let storage: Repository;
+let storage: RedisAdapter;
 const taskInput = faker.lorem.sentence();
 const taskInput2 = faker.number.int();
 const taskResult = faker.lorem.sentence();
@@ -20,13 +20,12 @@ const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
-  await storage.initialize();
-  transformer = IdempotentTransformer.getInstance({
+  storage = new RedisAdapter('redis://localhost:6379');
+  IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
-    log: new ConsoleLogger(),
+    logger: null,
   });
 });
 
@@ -36,7 +35,9 @@ Given('compression is enabled', async function () {
 
 Given('a task result "Hello, world!" is ready to be persisted', async function () {
   const asyncTask = async (input: string, input2: number) => taskResult;
-  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask });
+  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+    task: asyncTask,
+  });
   wrappedTask = wrapped.task;
 });
 
@@ -44,7 +45,7 @@ When('the task result is serialized and persisted to the state store', async fun
   // Persist the result with compression enabled
   await wrappedTask(taskInput, taskInput2, { shouldCompress: true });
   // Compute the taskUniqueId for direct state store access
-  taskUniqueId = await transformer.createHash({
+  taskUniqueId = await IdempotentTransformer.getInstance().createHash({
     workflowId,
     functionName: 'task',
   });
@@ -53,7 +54,7 @@ When('the task result is serialized and persisted to the state store', async fun
 Then('the persisted data should be compressed', async function () {
   const persisted = await storage.find(taskUniqueId);
   // Try to decompress, should succeed
-  let decompressed: Uint8Array | undefined = undefined;
+  let decompressed: TSerialized | undefined = undefined;
   let decompressError = null;
   try {
     decompressed = await compressor.decompress(persisted!);
@@ -79,5 +80,5 @@ Then('the original task result should not be stored in plain text', async functi
 });
 
 AfterAll(async () => {
-  await storage.destroy();
+  await storage.disconnect();
 });

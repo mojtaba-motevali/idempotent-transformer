@@ -1,27 +1,34 @@
-import { Compressor } from '../../base/compressor';
-import { Logger } from '../../base/logger';
-import { Serializer } from '../../base/serializer';
-import { StateStore } from '../../base/state-store';
+import { IdempotentCompressor } from '../../base/compressor';
+import { IdempotentCrypto } from '../../base/crypto';
+import { IdempotentLogger } from '../../base/logger';
+import { IdempotentSerializer } from '../../base/serializer';
+import { IdempotentStateStore } from '../../base/state-store';
 
 export interface IdempotentTransformerInput {
   /**
    * The logger to use for the idempotent transformer
    * @default console
    */
-  log: Logger;
+  log?: IdempotentLogger;
   /**
    * The state store to use for the idempotent transformer
    * @default Redis
    */
-  storage: StateStore;
+  storage: IdempotentStateStore;
   /**
    * The serializer to use for the idempotent transformer
    * @default MessagePack
    */
-  serializer: Serializer;
+  serializer: IdempotentSerializer;
   /**
    * The compressor to use for the idempotent transformer
    * @default zstd
    */
-  compressor: Compressor;
+  compressor?: IdempotentCompressor;
+
+  /**
+   * The crypto to use for the idempotent transformer
+   * @default md5
+   */
+  crypto: IdempotentCrypto;
 }

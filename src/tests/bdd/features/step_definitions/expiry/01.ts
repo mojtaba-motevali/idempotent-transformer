@@ -3,14 +3,15 @@ import { expect } from 'chai';
 import { IdempotentTransformer } from '../../../../../lib/idempotent-transformer';
 import { IOptions } from '../../../../../lib/idempotent-transformer/interfaces/idempotent-options.interface';
 import { ConsoleLogger } from '../../../../../lib/logger/console-logger';
-import { Repository } from '../../../../../adapters/redis';
+import { RedisAdapter } from '../../../../../adapters/redis';
 import { MessagePack } from '../../../../../adapters/message-pack';
 import { ZstdCompressor } from '../../../../../adapters/zstd';
 import { faker } from '@faker-js/faker';
+import { IdempotentFactory } from '../../../../../lib/factory/idempotent-factory';
 
 let transformer: IdempotentTransformer;
 let wrappedTask: (input: any, options?: IOptions) => Promise<any>;
-let storage: Repository;
+let storage: RedisAdapter;
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
 let taskUniqueId: string;
@@ -19,19 +20,24 @@ const compressor = new ZstdCompressor();
 const ttlMs = 2000; // 2 seconds
 
 BeforeAll(async () => {
-  storage = new Repository('redis://localhost:6379');
-  await storage.initialize();
-  transformer = IdempotentTransformer.getInstance({
+  storage = new RedisAdapter('redis://localhost:6379');
+  IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),
     compressor,
-    log: new ConsoleLogger(),
+    logger: null,
   });
 });
 
 Given('a TTL of 2 seconds is configured for state entries S1', async function () {
   const asyncTask = async (input: any) => taskResult;
-  const wrapped = transformer.makeIdempotent(workflowId, { task: asyncTask }, { ttl: ttlMs });
+  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(
+    workflowId,
+    {
+      task: asyncTask,
+    },
+    { ttl: ttlMs }
+  );
   wrappedTask = wrapped.task;
 });
 
@@ -41,7 +47,7 @@ Given('a task result "Hello, world!" is ready to be persisted S1', async functio
 
 When('the task result is serialized and persisted to the state store S1', async function () {
   await wrappedTask(taskInput);
-  taskUniqueId = await transformer.createHash({
+  taskUniqueId = await IdempotentTransformer.getInstance().createHash({
     workflowId,
     contextName: 'task',
   });
@@ -59,5 +65,5 @@ Then('after 3 seconds, the entry should be expired and no longer available S1', 
 });
 
 AfterAll(async () => {
-  await storage.destroy();
+  await storage.disconnect();
 });

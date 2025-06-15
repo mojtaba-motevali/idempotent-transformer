@@ -1,1 +1,1 @@
-export { Repository } from './redis';
+export { RedisAdapter } from './redis';

@@ -1,4 +1,4 @@
-import { Serialize } from './decorators/serialize.decorator';
+import { Serialize } from '../../lib/base/serializer/serialize.decorator';
 import { MessagePack } from './message-pack';
 
 @Serialize({ name: 'Lolita' })

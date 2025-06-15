@@ -1,22 +1,26 @@
 import { createClient, RedisClientOptions } from 'redis';
-import { IStateStoreOptions, StateStore } from '../../lib/base/state-store';
+import { IStateStoreOptions, IdempotentStateStore } from '../../lib/base/state-store';
 
-export class Repository extends StateStore {
+export class RedisAdapter extends IdempotentStateStore {
   private client: ReturnType<typeof createClient>;
   constructor(url: string, options?: RedisClientOptions) {
     super();
     this.client = createClient({ url, ...(options ? options : {}) });
   }
 
-  async initialize() {
+  async connect() {
     await this.client.connect();
     this.client.on('error', (err) => {
       console.error('Redis error:', err);
     });
   }
 
-  async destroy() {
+  async disconnect() {
     await this.client.quit();
+  }
+
+  async isConnected() {
+    return this.client.isOpen;
   }
 
   /**
