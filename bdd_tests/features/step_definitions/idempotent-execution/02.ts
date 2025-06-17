@@ -37,7 +37,7 @@ Given('an asynchronous task that accepts parameters', async function () {
 When(
   'I wrap the task with the idempotent execution wrapper and I execute the wrapped task with parameter "A" successfully',
   async () => {
-    const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+    const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
       task: asyncTask,
     });
     await wrapped.task({
@@ -49,7 +49,7 @@ When(
 Then(
   'the task fails with Conflict exception when I execute the wrapped task with parameter "B"',
   async () => {
-    const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+    const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
       task: asyncTask,
     });
     let error: unknown;

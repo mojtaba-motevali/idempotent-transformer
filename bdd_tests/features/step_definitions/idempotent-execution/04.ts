@@ -61,7 +61,7 @@ Given(
         return input;
       },
       task2: async () => {
-        const { task5, task6, task7 } = IdempotentTransformer.getInstance().makeIdempotent(
+        const { task5, task6, task7 } = await IdempotentTransformer.getInstance().makeIdempotent(
           idempotentWorkflowKey,
           {
             task5: innerWorkflowTasks.task5,
@@ -89,7 +89,7 @@ Given(
   }
 );
 When('I execute second task of the inner workflow and fails', async function () {
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
     task1: outerWorkflowTasks.task1,
     task3: outerWorkflowTasks.task3,
     task4: outerWorkflowTasks.task4,
@@ -108,7 +108,7 @@ When('I execute second task of the inner workflow and fails', async function () 
 
 Then('I retry the outer workflow to recover from the failure', async function () {
   ++retryCount;
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
     task1: outerWorkflowTasks.task1,
     task3: outerWorkflowTasks.task3,
     task4: outerWorkflowTasks.task4,

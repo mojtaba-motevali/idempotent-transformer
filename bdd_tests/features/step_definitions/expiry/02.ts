@@ -28,7 +28,7 @@ BeforeAll(async () => {
 
 Given('no TTL is configured for state entries S2', async function () {
   // No TTL option passed
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(
     workflowId,
     {
       task: async (input: any) => taskResult,

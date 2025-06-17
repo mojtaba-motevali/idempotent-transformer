@@ -48,7 +48,7 @@ Given('an asynchronous task that returns a value', async function () {
   };
 });
 When('I wrap the task with the idempotent execution wrapper', async function () {
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
     task: asyncTask,
   });
   wrappedTask = wrapped.task;

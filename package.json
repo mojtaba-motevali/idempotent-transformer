@@ -16,7 +16,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "prepare": "npm run clean && npm run build",
     "prepublishOnly": "npm test && npm run lint",
-    "build:all": "pnpm install && pnpm -r run build"
+    "build:all": "pnpm install && pnpm -r run build",
+    "build:redis": "pnpm --filter @idempotent-transformer/adapter-redis build"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",

@@ -36,7 +36,7 @@ export class AppService {
   }
 
   async writeJSON(actionId: string, data: { name: string }): Promise<string> {
-    const idempotent = this.idempotent.makeIdempotent(actionId, {
+    const idempotent = await this.idempotent.makeIdempotent(actionId, {
       writeFile: (...args: Parameters<typeof this.writeFile>) =>
         this.writeFile(...args),
       ping: (...args: Parameters<typeof this.exampleService.ping>) =>

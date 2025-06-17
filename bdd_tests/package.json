@@ -1,26 +1,28 @@
 {
-    "name": "@idempotent-transformer/bdd",
-    "version": "0.1.0",
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "files": ["dist"],
-    "scripts": {
-      "build": "tsc",
-      "test": "cucumber-js -c cucumber.json"
-    },
-    "dependencies": {
-      "@idempotent-transformer/base": "workspace:*",
-      "@idempotent-transformer/core": "workspace:*",
-      "@idempotent-transformer/adapter-crypto": "workspace:*",
-      "@idempotent-transformer/adapter-message-pack": "workspace:*",
-      "@idempotent-transformer/adapter-redis": "workspace:*",
-      "@idempotent-transformer/adapter-zstd": "workspace:*"
-    },
-    "devDependencies": {
-      "@types/node": "^22.15.20",
-      "jest": "^29.7.0",
-      "ts-jest": "^29.3.4",
-      "@types/jest": "^29.5.14"
-    }
+  "name": "@idempotent-transformer/bdd",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "cucumber-js -c cucumber.json"
+  },
+  "dependencies": {
+    "@idempotent-transformer/adapter-crypto": "workspace:*",
+    "@idempotent-transformer/adapter-message-pack": "workspace:*",
+    "@idempotent-transformer/adapter-redis": "workspace:*",
+    "@idempotent-transformer/adapter-zstd": "workspace:*",
+    "@idempotent-transformer/base": "workspace:*",
+    "@idempotent-transformer/bdd": "link:",
+    "@idempotent-transformer/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.20",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.4"
   }
-  
+}

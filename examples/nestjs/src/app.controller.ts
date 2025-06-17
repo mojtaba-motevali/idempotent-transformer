@@ -1,5 +1,12 @@
-import { Body, Controller, Headers, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  Post,
+} from '@nestjs/common';
 import { AppService } from './app.service';
+import { IdempotencyConflictException } from '@idempotent-transformer/core';
 
 @Controller()
 export class AppController {
@@ -8,8 +15,15 @@ export class AppController {
   @Post()
   async writeJSON(
     @Headers('Idempotent-Key') key: string,
-    @Body() data: any,
+    @Body() data: { id: string; name: string; lastName: string },
   ): Promise<string> {
-    return await this.appService.writeJSON(key, data);
+    try {
+      return await this.appService.writeJSON(key, data);
+    } catch (err) {
+      if (err instanceof IdempotencyConflictException) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
   }
 }

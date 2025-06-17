@@ -2,10 +2,12 @@ import { createClient, RedisClientOptions } from 'redis';
 import { IStateStoreOptions, IdempotentStateStore } from '@idempotent-transformer/base';
 
 export class RedisAdapter extends IdempotentStateStore {
+  private basePath: string;
   private client: ReturnType<typeof createClient>;
   constructor(url: string, options?: RedisClientOptions) {
     super();
     this.client = createClient({ url, ...(options ? options : {}) });
+    this.basePath = 'idempotent-workflows';
   }
 
   async connect() {
@@ -41,15 +43,18 @@ export class RedisAdapter extends IdempotentStateStore {
     options: IStateStoreOptions
   ): Promise<void> => {
     const buffer = Buffer.from(value);
-    await this.client.sendCommand(['SET', key, buffer, ...this.getExpiry(options.ttl)], {
-      typeMapping: {
-        '36': Buffer,
-      },
-    });
+    await this.client.sendCommand(
+      ['SET', `${this.basePath}:${key}`, buffer, ...this.getExpiry(options.ttl)],
+      {
+        typeMapping: {
+          '36': Buffer,
+        },
+      }
+    );
   };
 
   find = async (key: string): Promise<Uint8Array<ArrayBufferLike> | null> => {
-    const value: Buffer | null = await this.client.sendCommand(['GET', key], {
+    const value: Buffer | null = await this.client.sendCommand(['GET', `${this.basePath}:${key}`], {
       // By default, the value is returned as a string, so we need to map it to a Buffer to avoid data loss.
       typeMapping: {
         '36': Buffer,

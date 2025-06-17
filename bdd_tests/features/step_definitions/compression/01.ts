@@ -36,7 +36,7 @@ Given('compression is enabled', async function () {
 
 Given('a task result "Hello, world!" is ready to be persisted', async function () {
   const asyncTask = async (input: string, input2: number) => taskResult;
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
     task: asyncTask,
   });
   wrappedTask = wrapped.task;
