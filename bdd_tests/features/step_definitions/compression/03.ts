@@ -33,7 +33,7 @@ Given('compression is now enabled in the library configuration', async function 
 
 Given('an uncompressed task result was previously stored in the state store', async function () {
   // Store the result without compression
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
     task: async (input: any) => taskResult,
   });
   wrappedTask = wrapped.task;

@@ -26,7 +26,7 @@ export default function Home() {
   const [count2, setCount2] = useState(0);
 
   const handleClick = async () => {
-    const idempotent = IdempotentTransformer.getInstance().makeIdempotent(pageRef.current!, {
+    const idempotent = await IdempotentTransformer.getInstance().makeIdempotent(pageRef.current!, {
       mutationApiCall: async (...args: Parameters<typeof mutationApiCall>) =>
         mutationApiCall(...args),
       mutationApiCall2: async (...args: Parameters<typeof mutationApiCall2>) =>
@@ -37,7 +37,6 @@ export default function Home() {
 
     const result2 = await idempotent.mutationApiCall2();
     setCount2(result2 as number);
-    console.log(result, result2);
   };
 
   return (

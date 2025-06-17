@@ -29,7 +29,7 @@ BeforeAll(async () => {
 });
 
 Given('a TTL of 2 seconds is configured for state entries S1', async function () {
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(
     workflowId,
     {
       task: async (input: any) => taskResult,

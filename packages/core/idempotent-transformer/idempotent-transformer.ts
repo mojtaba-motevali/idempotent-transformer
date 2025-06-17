@@ -67,13 +67,26 @@ export class IdempotentTransformer {
     return IdempotentTransformer.instance;
   }
 
-  makeIdempotent<T extends Record<string, (...args: any[]) => Promise<any>>>(
+  /**
+   * Makes a set of functions idempotent.
+   * @param workflowId - The workflow id.
+   * @param functions - The functions to make idempotent. For class methods, use the class method inside an arrow function.
+   * @param options - The options for the transformer.
+   * @returns The result of the transformation function.
+   * @example
+   * ```ts
+   * const result = transformer.makeIdempotent('my-workflow-id', {
+   *  exampleMethod: (...args: Parameters<typeof ExampleClass.exampleMethod>) => this.exampleMethod(...args)
+   * });
+   * ``
+   */
+  async makeIdempotent<T extends Record<string, (...args: any[]) => Promise<any>>>(
     workflowId: string,
     functions: T,
     options: IdempotentTransformerOptions = {
       ttl: 1000 * 60 * 60,
     }
-  ): MakeIdempotentResult<T> {
+  ): Promise<MakeIdempotentResult<T>> {
     const callbacks = functions as Record<string, (...args: any[]) => Promise<any>>;
 
     const result = {} as MakeIdempotentResult<T>;
@@ -196,6 +209,7 @@ export class IdempotentTransformer {
         context: {
           taskName: callbackFn.name,
         },
+        workflowId,
       });
       this.logger?.debug(`Saved result for task ${taskUniqueId}`);
       return result;

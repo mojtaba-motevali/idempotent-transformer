@@ -11,6 +11,11 @@ export interface IStateStoreOptions {
   context: {
     taskName: string;
   };
+
+  /**
+   * The workflow id.
+   */
+  workflowId: string;
 }
 
 export abstract class IdempotentStateStore {

@@ -32,7 +32,7 @@ Given(
   async function () {
     // Store the result without compression
     const asyncTask = async (input: any) => taskResult;
-    const wrapped = IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+    const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
       task: asyncTask,
     });
     wrappedTask = wrapped.task;

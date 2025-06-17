@@ -51,7 +51,7 @@ BeforeAll(async () => {
 // Setup transformer with in-memory storage for testing
 Given('a workflow including 4 tasks', async function () {});
 When('I execute 2 tasks successfully and third one fails', async function () {
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
     ...workflowTasks,
   });
   let error: unknown;
@@ -67,7 +67,7 @@ When('I execute 2 tasks successfully and third one fails', async function () {
 
 Then('I retry execution of the all tasks', async function () {
   ++retryCount;
-  const wrapped = IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
+  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(idempotentWorkflowKey, {
     ...workflowTasks,
   });
   await wrapped.task1(input);
