@@ -1,0 +1,46 @@
+@startuml
+
+Caller -> Transformed_Executator: Execute a task
+
+Transformed_Executator -> Serialize_Module: Serialize Workflow_ID/Context_Name
+Serialize_Module -> Transformed_Executator: Serialized Result
+
+Transformed_Executator -> Serialize_Module: Serialize Input
+Serialize_Module -> Transformed_Executator: Serialized Result
+
+
+Transformed_Executator -> Crypto_Module: Form task_id by hashing workflow_ID and Context_Name
+Crypto_Module -> Transformed_Executator: Hash Result
+
+
+
+Transformed_Executator -> State_Store_Module: Check if there is a State Data with generated task_id 
+State_Store_Module -> Transformed_Executator: Return cached State Data if found
+
+== State Found ==
+
+Transformed_Executator -> Compression_Module: Decompress State Data if compressd
+Compression_Module -> Transformed_Executator: Decompressed Value returned
+
+Transformed_Executator -> Serialize_Module: Deserialize found State Data
+Serialize_Module -> Transformed_Executator: Return Deserialized State Data
+Transformed_Executator -> Caller: Return the State Data
+
+== State Not Found ==
+
+Transformed_Executator -> Transformed_Executator: Execute the given task
+
+Transformed_Executator -> Serialize_Module: Serialize result as Data State and Input hash
+
+Serialize_Module -> Transformed_Executator: Return serialized Data State
+
+Transformed_Executator -> Compression_Module: Optionally Compress State Data 
+
+Compression_Module -> Transformed_Executator: Return compressed State Data 
+
+Transformed_Executator -> State_Store_Module: Store the State Data under task_id 
+
+Transformed_Executator -> Caller: Return the State Data
+
+
+@enduml
