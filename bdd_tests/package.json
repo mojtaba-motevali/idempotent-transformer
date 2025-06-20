@@ -11,12 +11,12 @@
     "test": "cucumber-js -c cucumber.json"
   },
   "dependencies": {
-    "@idempotent-transformer/adapter-crypto": "workspace:*",
-    "@idempotent-transformer/adapter-message-pack": "workspace:*",
-    "@idempotent-transformer/adapter-redis": "workspace:*",
-    "@idempotent-transformer/adapter-zstd": "workspace:*",
+    "@idempotent-transformer/adapter-crypto": "0.1.2",
+    "@idempotent-transformer/adapter-message-pack": "0.1.3",
+    "@idempotent-transformer/adapter-redis": "0.1.2",
+    "@idempotent-transformer/adapter-zstd": "0.1.2",
     "@idempotent-transformer/bdd": "link:",
-    "@idempotent-transformer/core": "workspace:*"
+    "@idempotent-transformer/core": "0.1.2"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

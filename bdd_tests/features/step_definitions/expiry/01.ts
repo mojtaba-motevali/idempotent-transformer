@@ -18,7 +18,11 @@ const compressor = new ZstdCompressor();
 const ttlMs = 2000; // 2 seconds
 
 BeforeAll(async () => {
-  storage = new RedisAdapter('redis://localhost:6379');
+  storage = new RedisAdapter({
+    option: {
+      url: 'redis://localhost:6379',
+    },
+  });
   await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),

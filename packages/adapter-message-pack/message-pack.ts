@@ -29,7 +29,7 @@ export class MessagePack extends IdempotentSerializer {
         write: (object: unknown) => {
           const unBoxedObject = object as unknown as Serializable;
           const key: string = Model[SERIALIZE_NAME_METADATA_KEY];
-          return [key, unBoxedObject.toJSON()];
+          return [key, unBoxedObject.serialize()];
         },
         read: (data) => {
           const key = data[0];
@@ -38,7 +38,7 @@ export class MessagePack extends IdempotentSerializer {
           if (!Model) {
             throw new ModelIsNotDecoratedException(key);
           }
-          return Model.fromJSON(value);
+          return Model.deserialize(value);
         },
       });
     });

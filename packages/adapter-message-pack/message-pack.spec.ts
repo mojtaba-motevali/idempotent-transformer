@@ -10,13 +10,13 @@ class Test {
     this.#b = b;
   }
 
-  toJSON() {
+  serialize() {
     return {
       a: this.#a,
       b: this.#b,
     };
   }
-  static fromJSON(json: any) {
+  static deserialize(json: any) {
     return new Test(json.a, json.b);
   }
   getB() {
@@ -31,13 +31,13 @@ class Test2 {
     public b: Test
   ) {}
 
-  toJSON() {
+  serialize() {
     return {
       a: this.a,
-      b: this.b.toJSON(),
+      b: this.b.serialize(),
     };
   }
-  static fromJSON(json: ReturnType<Test2['toJSON']>) {
+  static deserialize(json: ReturnType<Test2['serialize']>) {
     return new Test2(json.a, new Test(json.b.a, json.b.b));
   }
 }
@@ -98,8 +98,8 @@ describe('MessagePack', () => {
     const deserialized: any = await messagePack.deserialize(serialized);
     expect({
       ...deserialized,
-      test: deserialized.test.toJSON(),
-      test2: deserialized.test2.toJSON(),
+      test: deserialized.test.serialize(),
+      test2: deserialized.test2.serialize(),
     }).toEqual({
       name: 'John',
       age: 30,

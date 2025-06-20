@@ -84,7 +84,7 @@ export class IdempotentTransformer {
     workflowId: string,
     functions: T,
     options: IdempotentTransformerOptions = {
-      ttl: 1000 * 60 * 60,
+      ttl: null,
     }
   ): Promise<MakeIdempotentResult<T>> {
     const callbacks = functions as Record<string, (...args: any[]) => Promise<any>>;

@@ -20,7 +20,11 @@ const workflowId = faker.string.uuid();
 const compressor = new ZstdCompressor();
 
 BeforeAll(async () => {
-  storage = new RedisAdapter('redis://localhost:6379');
+  storage = new RedisAdapter({
+    option: {
+      url: 'redis://localhost:6379',
+    },
+  });
   await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),

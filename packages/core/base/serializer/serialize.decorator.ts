@@ -4,8 +4,8 @@ import { IdempotentSerializer } from './serializer';
 import { Serializable } from './serializer.interface';
 
 export const SERIALIZE_NAME_METADATA_KEY = 'serialize_key';
-const serializeMethodName: keyof Serializable = 'toJSON';
-const deserializeMethodName: keyof Serializable = 'fromJSON';
+const serializeMethodName: keyof Serializable = 'serialize';
+const deserializeMethodName: keyof Serializable = 'deserialize';
 
 /**
  * Decorator to mark a class as serializable. Users of this decorator must implement the Serializable interface.

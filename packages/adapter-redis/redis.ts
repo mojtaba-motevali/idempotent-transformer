@@ -4,13 +4,25 @@ import { IStateStoreOptions, IdempotentStateStore } from '@idempotent-transforme
 export class RedisAdapter extends IdempotentStateStore {
   private basePath: string;
   private client: ReturnType<typeof createClient>;
-  constructor(url: string, options?: RedisClientOptions) {
+  constructor({
+    option,
+    redis,
+  }: {
+    option?: RedisClientOptions;
+    redis?: ReturnType<typeof createClient>;
+  }) {
     super();
-    this.client = createClient({ url, ...(options ? options : {}) });
+    if (!option && !redis) {
+      throw new Error('Redis client is not provided');
+    }
+    this.client = redis ?? createClient(option);
     this.basePath = 'idempotent-workflows';
   }
 
   async connect() {
+    if (await this.isConnected()) {
+      return;
+    }
     await this.client.connect();
     this.client.on('error', (err) => {
       console.error('Redis error:', err);
@@ -18,6 +30,9 @@ export class RedisAdapter extends IdempotentStateStore {
   }
 
   async disconnect() {
+    if (!(await this.isConnected())) {
+      return;
+    }
     await this.client.quit();
   }
 

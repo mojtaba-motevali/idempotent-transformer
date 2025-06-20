@@ -13,7 +13,7 @@ export type MakeIdempotentResult<T extends Record<string, (input: any) => Promis
 export interface IdempotentTransformerOptions {
   /**
    * The number of milliseconds when the task result will be considered expired.
-   * @default 1 hour
+   * @default null
    */
   ttl?: number | null;
 }
