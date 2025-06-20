@@ -4,6 +4,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
+  "license": "MIT",
   "scripts": {
     "build": "tsc"
   },
@@ -14,5 +15,8 @@
   "devDependencies": {
     "@types/node": "^22.15.20",
     "@types/mocha": "^10.0.10"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
