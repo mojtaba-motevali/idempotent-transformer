@@ -5,10 +5,14 @@ type CollectionType =
   | Set<PrimitiveTypes>
   | Map<PrimitiveTypes, PrimitiveTypes | object>;
 
-export type SupportedTypes = PrimitiveTypes | CollectionType;
+type PlainObject = {
+  [key: string]: PrimitiveTypes | PlainObject | Array<PrimitiveTypes | PlainObject>;
+};
 
-export interface Serializable<T = any> {
-  serialize(): Record<string, SupportedTypes>;
+export type SupportedTypes = PrimitiveTypes | CollectionType | PlainObject;
+
+export interface Serializable<T extends SupportedTypes = SupportedTypes> {
+  serialize(): T;
   /**
    * @description Use this to construct the object from a JSON object.
    * @param json - The JSON object to construct the object from.
