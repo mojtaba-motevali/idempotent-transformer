@@ -4,7 +4,7 @@ import {
   Serializable,
   SERIALIZE_NAME_METADATA_KEY,
   TSerialized,
-} from '@idempotent-transformer/base';
+} from '@idempotent-transformer/core';
 import { ModelIsNotDecoratedException } from './errors';
 
 export class MessagePack extends IdempotentSerializer {

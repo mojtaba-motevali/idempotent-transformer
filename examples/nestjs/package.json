@@ -28,7 +28,6 @@
     "rxjs": "^7.8.1",
     "@idempotent-transformer/core": "workspace:*",
     "@idempotent-transformer/nestjs": "workspace:*",
-    "@idempotent-transformer/base": "workspace:*",
     "@idempotent-transformer/adapter-zstd": "workspace:*",
     "@idempotent-transformer/adapter-redis": "workspace:*",
     "@idempotent-transformer/adapter-message-pack": "workspace:*",

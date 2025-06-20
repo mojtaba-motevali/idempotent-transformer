@@ -8,8 +8,10 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/base": "workspace:*",
-    "redis": "^5.1.0",
+    "@idempotent-transformer/core": "workspace:*",
+    "redis": "^5.1.0"
+  },
+  "devDependencies": {
     "@types/mocha": "^10.0.10"
   }
 }

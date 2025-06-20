@@ -1,4 +1,4 @@
-import { IdempotentCrypto, TSerialized } from '@idempotent-transformer/base';
+import { IdempotentCrypto, TSerialized } from '@idempotent-transformer/core';
 import { createHash } from 'crypto';
 
 export class Md5Adapter extends IdempotentCrypto {

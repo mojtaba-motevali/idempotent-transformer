@@ -4,7 +4,7 @@ import {
   IdempotentLogger,
   IdempotentSerializer,
   IdempotentStateStore,
-} from '@idempotent-transformer/base';
+} from '../../base';
 
 export interface IdempotentTransformerInput {
   /**

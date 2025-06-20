@@ -77,9 +77,6 @@ importers:
       '@idempotent-transformer/adapter-zstd':
         specifier: workspace:*
         version: link:../packages/adapter-zstd
-      '@idempotent-transformer/base':
-        specifier: workspace:*
-        version: link:../packages/base
       '@idempotent-transformer/bdd':
         specifier: 'link:'
         version: 'link:'
@@ -102,9 +99,9 @@ importers:
 
   packages/adapter-crypto:
     dependencies:
-      '@idempotent-transformer/base':
+      '@idempotent-transformer/core':
         specifier: workspace:*
-        version: link:../base
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.15.20
@@ -112,9 +109,9 @@ importers:
 
   packages/adapter-message-pack:
     dependencies:
-      '@idempotent-transformer/base':
+      '@idempotent-transformer/core':
         specifier: workspace:*
-        version: link:../base
+        version: link:../core
       msgpackr:
         specifier: ^1.11.4
         version: 1.11.4
@@ -128,21 +125,22 @@ importers:
 
   packages/adapter-redis:
     dependencies:
-      '@idempotent-transformer/base':
+      '@idempotent-transformer/core':
         specifier: workspace:*
-        version: link:../base
-      '@types/mocha':
-        specifier: ^10.0.10
-        version: 10.0.10
+        version: link:../core
       redis:
         specifier: ^5.1.0
         version: 5.5.6
+    devDependencies:
+      '@types/mocha':
+        specifier: ^10.0.10
+        version: 10.0.10
 
   packages/adapter-zstd:
     dependencies:
-      '@idempotent-transformer/base':
+      '@idempotent-transformer/core':
         specifier: workspace:*
-        version: link:../base
+        version: link:../core
     devDependencies:
       '@types/jest':
         specifier: ^29.5.14
@@ -157,13 +155,7 @@ importers:
         specifier: ^29.3.4
         version: 29.4.0(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@22.15.31)(ts-node@10.9.2(@swc/core@1.12.1)(@types/node@22.15.31)(typescript@5.8.3)))(typescript@5.8.3)
 
-  packages/base: {}
-
   packages/core:
-    dependencies:
-      '@idempotent-transformer/base':
-        specifier: workspace:*
-        version: link:../base
     devDependencies:
       '@faker-js/faker':
         specifier: ^9.8.0
@@ -192,9 +184,6 @@ importers:
 
   packages/nestjs:
     dependencies:
-      '@idempotent-transformer/base':
-        specifier: workspace:*
-        version: link:../base
       '@idempotent-transformer/core':
         specifier: workspace:*
         version: link:../core

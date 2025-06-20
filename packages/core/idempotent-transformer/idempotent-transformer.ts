@@ -5,7 +5,7 @@ import {
   IdempotentSerializer,
   IdempotentStateStore,
   TSerialized,
-} from '@idempotent-transformer/base';
+} from '../base/';
 import { IdempotencyConflictException } from './exceptions/conflict.exception';
 import {
   IdempotencyResult,

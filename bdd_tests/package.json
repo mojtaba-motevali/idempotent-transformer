@@ -15,7 +15,6 @@
     "@idempotent-transformer/adapter-message-pack": "workspace:*",
     "@idempotent-transformer/adapter-redis": "workspace:*",
     "@idempotent-transformer/adapter-zstd": "workspace:*",
-    "@idempotent-transformer/base": "workspace:*",
     "@idempotent-transformer/bdd": "link:",
     "@idempotent-transformer/core": "workspace:*"
   },
