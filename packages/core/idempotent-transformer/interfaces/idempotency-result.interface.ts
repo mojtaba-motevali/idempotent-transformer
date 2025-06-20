@@ -1,4 +1,4 @@
 export interface IdempotencyResult<T> {
-  executionResult: T;
-  executionInputHash: string;
+  re: T;
+  in: string;
 }
