@@ -4,7 +4,7 @@ import {
   IdempotentLogger,
   IdempotentSerializer,
   IdempotentStateStore,
-} from '@idempotent-transformer/base';
+} from '../base';
 import { IdempotentTransformer } from '../idempotent-transformer';
 import { ConsoleLogger } from '../logger/console-logger';
 

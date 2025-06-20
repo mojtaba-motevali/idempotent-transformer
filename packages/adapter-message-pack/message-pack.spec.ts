@@ -1,4 +1,4 @@
-import { Serialize } from '@idempotent-transformer/base';
+import { Serialize } from '@idempotent-transformer/core';
 import { MessagePack } from './message-pack';
 
 @Serialize({ name: 'Lolita' })
@@ -26,7 +26,10 @@ class Test {
 
 @Serialize({ name: 'MyTest2' })
 class Test2 {
-  constructor(public a: string, public b: Test) {}
+  constructor(
+    public a: string,
+    public b: Test
+  ) {}
 
   toJSON() {
     return {

@@ -7,7 +7,7 @@ import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
 import { faker } from '@faker-js/faker';
 import { IdempotencyResult } from '@idempotent-transformer/core';
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { TSerialized } from '@idempotent-transformer/base/types/serialized.type';
+import { TSerialized } from '@idempotent-transformer/core';
 import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
 
 let wrappedTask: (input: string, input2: number, options?: IIdempotentTaskOptions) => Promise<any>;

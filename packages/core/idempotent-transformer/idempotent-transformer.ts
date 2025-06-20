@@ -5,7 +5,7 @@ import {
   IdempotentSerializer,
   IdempotentStateStore,
   TSerialized,
-} from '@idempotent-transformer/base';
+} from '../base/';
 import { IdempotencyConflictException } from './exceptions/conflict.exception';
 import {
   IdempotencyResult,
@@ -137,7 +137,7 @@ export class IdempotentTransformer {
       { ttl }: IdempotentTransformerOptions
     ) =>
     /**
-     * The transformeed task
+     * The transformed task
      * @param input - The input to the task
      * @param options - The options for the transformer
      * @returns The result of the transformation function
@@ -177,20 +177,20 @@ export class IdempotentTransformer {
         const deserializedResult =
           await this.serializer?.deserialize<IdempotencyResult<ReturnType<F>>>(decompressedResult);
 
-        if (deserializedResult.executionInputHash !== inputHash) {
+        if (deserializedResult.in !== inputHash) {
           this.logger?.debug(`Input hash mismatch for task ${taskUniqueId}`);
           throw new IdempotencyConflictException();
         }
         this.logger?.debug(`Deserialized result: ${deserializedResult}`);
-        return deserializedResult.executionResult;
+        return deserializedResult.re;
       }
 
       const result = await callbackFn(...input);
 
-      this.logger?.debug(`Execution was sucessful, saving result to storage`);
+      this.logger?.debug(`Execution was successful, saving result to storage`);
       const idempotentResult: IdempotencyResult<ReturnType<F>> = {
-        executionResult: result,
-        executionInputHash: inputHash,
+        re: result,
+        in: inputHash,
       };
 
       const serializedIdempotentResult = await this.serializer.serialize(idempotentResult);

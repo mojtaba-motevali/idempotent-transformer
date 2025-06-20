@@ -1,4 +1,4 @@
-import { IdempotentLogger } from '@idempotent-transformer/base';
+import { IdempotentLogger } from '../base';
 
 export class ConsoleLogger extends IdempotentLogger {
   error(message: string): void {

@@ -5,7 +5,7 @@ import {
   IdempotentSerializer,
   IdempotentStateStore,
   TSerialized,
-} from '@idempotent-transformer/base';
+} from '@idempotent-transformer/core';
 import crypto from 'crypto';
 
 export class Md5Crypto extends IdempotentCrypto {

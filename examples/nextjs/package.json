@@ -9,8 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@idempotent-transformer/adapter-crypto": "workspace:*",
-    "@idempotent-transformer/base": "workspace:*",
     "@idempotent-transformer/core": "workspace:*",
     "crypto-js": "^4.2.0",
     "next": "15.3.3",

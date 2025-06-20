@@ -4,12 +4,18 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
+  "license": "MIT",
   "scripts": {
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/base": "workspace:*",
-    "redis": "^5.1.0",
+    "@idempotent-transformer/core": "workspace:*",
+    "redis": "^5.1.0"
+  },
+  "devDependencies": {
     "@types/mocha": "^10.0.10"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
