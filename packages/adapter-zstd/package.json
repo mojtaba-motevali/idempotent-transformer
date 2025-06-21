@@ -9,7 +9,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "0.1.7"
+    "@idempotent-transformer/core": "0.1.8"
   },
   "devDependencies": {
     "@types/node": "^22.15.20",
