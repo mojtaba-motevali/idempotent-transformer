@@ -81,8 +81,8 @@ importers:
         specifier: 'link:'
         version: 'link:'
       '@idempotent-transformer/core':
-        specifier: 0.1.9
-        version: 0.1.9
+        specifier: 0.1.10
+        version: 0.1.10
     devDependencies:
       '@types/jest':
         specifier: ^29.5.14
@@ -100,8 +100,8 @@ importers:
   packages/adapter-crypto:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.8
-        version: 0.1.8
+        specifier: 0.1.10
+        version: 0.1.10
     devDependencies:
       '@types/node':
         specifier: ^22.15.20
@@ -110,8 +110,8 @@ importers:
   packages/adapter-message-pack:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.8
-        version: 0.1.8
+        specifier: 0.1.10
+        version: 0.1.10
       msgpackr:
         specifier: ^1.11.4
         version: 1.11.4
@@ -126,8 +126,8 @@ importers:
   packages/adapter-redis:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.9
-        version: 0.1.9
+        specifier: 0.1.10
+        version: 0.1.10
       ioredis:
         specifier: ^5.6.1
         version: 5.6.1
@@ -139,8 +139,8 @@ importers:
   packages/adapter-zstd:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.8
-        version: 0.1.8
+        specifier: 0.1.10
+        version: 0.1.10
     devDependencies:
       '@types/jest':
         specifier: ^29.5.14
@@ -185,8 +185,8 @@ importers:
   packages/nestjs:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.9
-        version: 0.1.9
+        specifier: 0.1.10
+        version: 0.1.10
       '@nestjs/common':
         specifier: ^11.1.3
         version: 11.1.3(class-transformer@0.5.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -521,11 +521,11 @@ packages:
   '@idempotent-transformer/adapter-zstd@0.1.2':
     resolution: {integrity: sha512-AVNUvm2C88ah+kE/KLoEdLPO0DFAo0fbP1gGBB7UgCATuDqJ9x7voKHwtyix6KZAW3h4Vl2QjsZ2GUy/Huz96w==}
 
+  '@idempotent-transformer/core@0.1.10':
+    resolution: {integrity: sha512-fPnhliFfCYZGZDL85lfIxztW/u0ttu1WFpJh72YGNxVScF5ZUS5buXTf0cgkm737cLPclJcMy0hW2MqrxqaSlg==}
+
   '@idempotent-transformer/core@0.1.2':
     resolution: {integrity: sha512-fCtIpbftt9J/ow80wNnYhqnfPEBrjpNBqmHfaP80q1Ea3MB+n2X593vNzm4RdzssuyMVg+lv/u23c0M3jRgkdg==}
-
-  '@idempotent-transformer/core@0.1.8':
-    resolution: {integrity: sha512-5Gkrh3a4IvZD9o37ziegRa3pRvz4Ofek/zQjcqIuasHwVGME4NBURkU+RSGpJHVPuZ5Sgq0QNjdeyp1Iu9tavA==}
 
   '@idempotent-transformer/core@0.1.9':
     resolution: {integrity: sha512-ubJYZVSCofseHlLR8TYGxwR7R3cfHJ7jPQxoO4etKVHkU6Bb9uybrsrROqepfMzpifWHuuJiHMNNMNAklwCSsQ==}
@@ -3191,9 +3191,9 @@ snapshots:
     dependencies:
       '@idempotent-transformer/core': 0.1.2
 
-  '@idempotent-transformer/core@0.1.2': {}
+  '@idempotent-transformer/core@0.1.10': {}
 
-  '@idempotent-transformer/core@0.1.8': {}
+  '@idempotent-transformer/core@0.1.2': {}
 
   '@idempotent-transformer/core@0.1.9': {}
 

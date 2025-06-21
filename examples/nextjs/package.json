@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "workspace:*",
+    "@idempotent-transformer/core": "0.1.10",
     "crypto-js": "^4.2.0",
     "next": "15.3.3",
     "nextjs": "link:",
