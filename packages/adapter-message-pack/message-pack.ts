@@ -27,14 +27,14 @@ export class MessagePack extends IdempotentSerializer {
         type: 1,
         Class: Model,
         write: (object: unknown) => {
-          const unBoxedObject = object as unknown as Serializable;
+          const unBoxedObject = object as Serializable;
           const key: string = Model[SERIALIZE_NAME_METADATA_KEY];
           return [key, unBoxedObject.serialize()];
         },
         read: (data) => {
           const key = data[0];
           const value = data[1];
-          const Model = IdempotentSerializer.decoratedModels.get(key) as unknown as Serializable;
+          const Model = IdempotentSerializer.decoratedModels.get(key);
           if (!Model) {
             throw new ModelIsNotDecoratedException(key);
           }

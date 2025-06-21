@@ -1,7 +1,11 @@
 import { Serialize } from '@idempotent-transformer/core';
 import { MessagePack } from './message-pack';
 
-@Serialize({ name: 'Lolita' })
+@Serialize({
+  name: 'Lolita',
+  serializeMethodName: 'serialize',
+  deserializeMethodName: 'deserialize',
+})
 class Test {
   #a: string;
   #b: number;
@@ -16,15 +20,21 @@ class Test {
       b: this.#b,
     };
   }
+
   static deserialize(json: any) {
     return new Test(json.a, json.b);
   }
+
   getB() {
     return this.#b + 20;
   }
 }
 
-@Serialize({ name: 'MyTest2' })
+@Serialize({
+  name: 'MyTest2',
+  serializeMethodName: 'serialize',
+  deserializeMethodName: 'deserialize',
+})
 class Test2 {
   constructor(
     public a: string,
