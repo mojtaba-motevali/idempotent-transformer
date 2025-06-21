@@ -37,10 +37,11 @@ export class RedisAdapter extends IdempotentStateStore {
   }
 
   isConnected() {
-    // According to ioredis docs, status is 'ready' when connected and ready to use.
-    // 'connect' means the socket is connected but not yet ready for commands.
-    // So, for most use cases, 'ready' is the correct check.
-    return this.client.status === 'ready';
+    return (
+      this.client.status === 'ready' ||
+      this.client.status === 'connecting' ||
+      this.client.status === 'connect'
+    );
   }
 
   save = async (

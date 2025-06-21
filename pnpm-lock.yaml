@@ -72,8 +72,8 @@ importers:
         specifier: 0.1.3
         version: 0.1.3
       '@idempotent-transformer/adapter-redis':
-        specifier: 0.1.12
-        version: 0.1.12
+        specifier: 0.1.14
+        version: 0.1.14
       '@idempotent-transformer/adapter-zstd':
         specifier: 0.1.2
         version: 0.1.2
@@ -515,8 +515,8 @@ packages:
   '@idempotent-transformer/adapter-message-pack@0.1.3':
     resolution: {integrity: sha512-aIOUBZTFCRRypEI05TUGGIkeZyIVISlB179VGfB1eWFJQhWQYgPbk3mPXIBGZKjOjOneTERReOrakOk0G1a9pQ==}
 
-  '@idempotent-transformer/adapter-redis@0.1.12':
-    resolution: {integrity: sha512-KFXNd0E4Qn/IKaVfwIBz5cc4HQbvTEysBLDAJpQi3evG0a6pz3ybZDvgVYScxpMEXECXyhq0I/2rpfRhCK4tog==}
+  '@idempotent-transformer/adapter-redis@0.1.14':
+    resolution: {integrity: sha512-eZe8lKSma0SH2C9VANfGMH33SEzKujSmZvHbi3ZQX3yokHskbF/B84Mx2IdY37nNkY06XKimwEDBuNPfCYVLEQ==}
 
   '@idempotent-transformer/adapter-zstd@0.1.2':
     resolution: {integrity: sha512-AVNUvm2C88ah+kE/KLoEdLPO0DFAo0fbP1gGBB7UgCATuDqJ9x7voKHwtyix6KZAW3h4Vl2QjsZ2GUy/Huz96w==}
@@ -526,9 +526,6 @@ packages:
 
   '@idempotent-transformer/core@0.1.2':
     resolution: {integrity: sha512-fCtIpbftt9J/ow80wNnYhqnfPEBrjpNBqmHfaP80q1Ea3MB+n2X593vNzm4RdzssuyMVg+lv/u23c0M3jRgkdg==}
-
-  '@idempotent-transformer/core@0.1.9':
-    resolution: {integrity: sha512-ubJYZVSCofseHlLR8TYGxwR7R3cfHJ7jPQxoO4etKVHkU6Bb9uybrsrROqepfMzpifWHuuJiHMNNMNAklwCSsQ==}
 
   '@ioredis/commands@1.2.0':
     resolution: {integrity: sha512-Sx1pU8EM64o2BrqNpEO1CNLtKQwyhuXuqyfH7oGKCk+1a33d2r5saW8zNwm3j6BTExtjrv2BxTgzzkMwts6vGg==}
@@ -3180,9 +3177,9 @@ snapshots:
       '@idempotent-transformer/core': 0.1.2
       msgpackr: 1.11.4
 
-  '@idempotent-transformer/adapter-redis@0.1.12':
+  '@idempotent-transformer/adapter-redis@0.1.14':
     dependencies:
-      '@idempotent-transformer/core': 0.1.9
+      '@idempotent-transformer/core': 0.1.10
       ioredis: 5.6.1
     transitivePeerDependencies:
       - supports-color
@@ -3194,8 +3191,6 @@ snapshots:
   '@idempotent-transformer/core@0.1.10': {}
 
   '@idempotent-transformer/core@0.1.2': {}
-
-  '@idempotent-transformer/core@0.1.9': {}
 
   '@ioredis/commands@1.2.0': {}
 
