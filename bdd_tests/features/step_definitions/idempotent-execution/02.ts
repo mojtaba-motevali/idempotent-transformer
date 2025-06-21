@@ -15,8 +15,9 @@ let asyncTask: (input: any) => Promise<any>;
 const workflowId = faker.string.uuid();
 const input = faker.string.uuid();
 const storage = new RedisAdapter({
-  option: {
-    url: 'redis://localhost:6379',
+  options: {
+    host: 'localhost',
+    port: 6379,
   },
 });
 

@@ -1,55 +1,46 @@
-import { createClient, RedisClientOptions } from 'redis';
+import { Redis, RedisOptions } from 'ioredis';
 import { IStateStoreOptions, IdempotentStateStore } from '@idempotent-transformer/core';
 
 export class RedisAdapter extends IdempotentStateStore {
   private basePath: string;
-  private client: ReturnType<typeof createClient>;
-  constructor({
-    option,
-    redis,
-  }: {
-    option?: RedisClientOptions;
-    redis?: ReturnType<typeof createClient>;
-  }) {
+  private client: Redis;
+  constructor({ options, redis }: { options?: RedisOptions; redis?: Redis }) {
     super();
-    if (!option && !redis) {
+    if (!options && !redis) {
       throw new Error('Redis client is not provided');
     }
-    this.client = redis ?? createClient(option);
+    this.client =
+      redis ??
+      new Redis({
+        ...options,
+        lazyConnect: true,
+        enableReadyCheck: true,
+      });
     this.basePath = 'idempotent-workflows';
   }
 
   async connect() {
-    if (await this.isConnected()) {
+    if (this.isConnected()) {
       return;
     }
     await this.client.connect();
-    this.client.on('error', (err) => {
+    this.client.on('error', (err: Error) => {
       console.error('Redis error:', err);
     });
   }
 
   async disconnect() {
-    if (!(await this.isConnected())) {
+    if (!this.isConnected()) {
       return;
     }
     await this.client.quit();
   }
 
-  async isConnected() {
-    return this.client.isOpen;
-  }
-
-  /**
-   * Get the expiry command for the Redis SET command.
-   * @param ttl - The TTL in milliseconds.
-   * @returns The expiry command for the Redis SET command.
-   */
-  private getExpiry(ttl: number | null): string[] {
-    if (ttl) {
-      return ['PX', ttl.toString()];
-    }
-    return [];
+  isConnected() {
+    // According to ioredis docs, status is 'ready' when connected and ready to use.
+    // 'connect' means the socket is connected but not yet ready for commands.
+    // So, for most use cases, 'ready' is the correct check.
+    return this.client.status === 'ready';
   }
 
   save = async (
@@ -58,23 +49,15 @@ export class RedisAdapter extends IdempotentStateStore {
     options: IStateStoreOptions
   ): Promise<void> => {
     const buffer = Buffer.from(value);
-    await this.client.sendCommand(
-      ['SET', `${this.basePath}:${key}`, buffer, ...this.getExpiry(options.ttl)],
-      {
-        typeMapping: {
-          '36': Buffer,
-        },
-      }
-    );
+    if (options.ttl) {
+      await this.client.set(`${this.basePath}:${key}`, buffer, 'PX', options.ttl.toString());
+    } else {
+      await this.client.set(`${this.basePath}:${key}`, buffer, 'GET');
+    }
   };
 
   find = async (key: string): Promise<Uint8Array<ArrayBufferLike> | null> => {
-    const value: Buffer | null = await this.client.sendCommand(['GET', `${this.basePath}:${key}`], {
-      // By default, the value is returned as a string, so we need to map it to a Buffer to avoid data loss.
-      typeMapping: {
-        '36': Buffer,
-      },
-    });
+    const value: Buffer | null = await this.client.getBuffer(`${this.basePath}:${key}`);
     return value ? new Uint8Array(value) : null;
   };
 }

@@ -19,9 +19,9 @@ export interface IStateStoreOptions {
 }
 
 export abstract class IdempotentStateStore {
-  abstract connect(): Promise<void>;
-  abstract disconnect(): Promise<void>;
-  abstract isConnected(): Promise<boolean>;
-  abstract find(id: string): Promise<TSerialized | null>;
-  abstract save(id: string, value: TSerialized, options: IStateStoreOptions): Promise<void>;
+  abstract connect(): Promise<void> | void;
+  abstract disconnect(): Promise<void> | void;
+  abstract isConnected(): Promise<boolean> | boolean;
+  abstract find(id: string): Promise<TSerialized | null> | TSerialized | null;
+  abstract save(id: string, value: TSerialized, options: IStateStoreOptions): Promise<void> | void;
 }

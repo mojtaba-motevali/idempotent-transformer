@@ -29,7 +29,7 @@
     "@idempotent-transformer/core": "0.1.3",
     "@idempotent-transformer/nestjs": "0.1.0",
     "@idempotent-transformer/adapter-zstd": "0.1.0",
-    "@idempotent-transformer/adapter-redis": "0.1.0",
+    "@idempotent-transformer/adapter-redis": "0.1.10",
     "@idempotent-transformer/adapter-message-pack": "0.1.0",
     "@idempotent-transformer/adapter-crypto": "0.1.0"
   },

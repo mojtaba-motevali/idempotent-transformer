@@ -14,8 +14,9 @@ let workflowExecution = [0, 0, 0, 0, 0, 0, 0];
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
 const storage: RedisAdapter = new RedisAdapter({
-  option: {
-    url: 'redis://localhost:6379',
+  options: {
+    host: 'localhost',
+    port: 6379,
   },
 });
 

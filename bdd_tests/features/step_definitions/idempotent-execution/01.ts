@@ -20,8 +20,9 @@ let currentDate = new Date();
 
 BeforeAll(async () => {
   storage = new RedisAdapter({
-    option: {
-      url: 'redis://localhost:6379',
+    options: {
+      host: 'localhost',
+      port: 6379,
     },
   });
   await IdempotentFactory.build({

@@ -19,8 +19,9 @@ const ttlMs = 2000; // 2 seconds
 
 BeforeAll(async () => {
   storage = new RedisAdapter({
-    option: {
-      url: 'redis://localhost:6379',
+    options: {
+      host: 'localhost',
+      port: 6379,
     },
   });
   await IdempotentFactory.build({
