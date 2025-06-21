@@ -1,19 +1,25 @@
 import { SerializationContractViolatedException } from './errors/serialization-contract-violated.exception';
 import { throwIfTrue } from './lib/throw-if-true';
 import { IdempotentSerializer } from './serializer';
-import { Serializable } from './serializer.interface';
 
 export const SERIALIZE_NAME_METADATA_KEY = 'serialize_key';
-const serializeMethodName: keyof Serializable = 'toJSON';
-const deserializeMethodName: keyof Serializable = 'fromJSON';
 
 /**
- * Decorator to mark a class as serializable. Users of this decorator must implement the Serializable interface.
- * @interface Serializable - The interface that must be implemented by the class.
+ * Decorator to mark a class as serializable. Users of this decorator must implement the serialize and deserialize methods.
  * @param name - The name of the class. Keep this unique.
+ * @param serializeMethodName - The name of the method to serialize the class.
+ * @param deserializeMethodName - The name of the method to deserialize the class. This is a static method.
  * @returns A class decorator.
  */
-export function Serialize({ name }: { name: string }): ClassDecorator {
+export function Serialize({
+  name,
+  serializeMethodName,
+  deserializeMethodName,
+}: {
+  name: string;
+  serializeMethodName: string;
+  deserializeMethodName: string;
+}): ClassDecorator {
   return (target: any) => {
     throwIfTrue(
       typeof target.prototype[serializeMethodName] !== 'function',
@@ -24,7 +30,7 @@ export function Serialize({ name }: { name: string }): ClassDecorator {
     throwIfTrue(
       typeof (target as any)[deserializeMethodName] !== 'function',
       new SerializationContractViolatedException(
-        `Class static method "${deserializeMethodName}" is not implemented. Please implement Serializable interface on your Model and make sure this method is static.`
+        `Class static method "${deserializeMethodName}" is not implemented. Please implement Deserializable interface on your Model and make sure this method is static.`
       )
     );
     Object.defineProperty(target, SERIALIZE_NAME_METADATA_KEY, {
@@ -33,7 +39,11 @@ export function Serialize({ name }: { name: string }): ClassDecorator {
       configurable: false,
       enumerable: false,
     });
-    IdempotentSerializer.decoratedModels.set(name, target);
+    IdempotentSerializer.decoratedModels.set(name, {
+      class: target,
+      serializeMethodName,
+      deserializeMethodName,
+    });
     return target;
   };
 }

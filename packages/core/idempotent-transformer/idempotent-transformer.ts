@@ -80,11 +80,11 @@ export class IdempotentTransformer {
    * });
    * ``
    */
-  async makeIdempotent<T extends Record<string, (...args: any[]) => Promise<any>>>(
+  async makeIdempotent<T extends Record<string, (...args: any[]) => Promise<any> | any>>(
     workflowId: string,
     functions: T,
     options: IdempotentTransformerOptions = {
-      ttl: 1000 * 60 * 60,
+      ttl: null,
     }
   ): Promise<MakeIdempotentResult<T>> {
     const callbacks = functions as Record<string, (...args: any[]) => Promise<any>>;
@@ -184,8 +184,13 @@ export class IdempotentTransformer {
         this.logger?.debug(`Deserialized result: ${deserializedResult}`);
         return deserializedResult.re;
       }
-
-      const result = await callbackFn(...input);
+      let result: ReturnType<F>;
+      const tempResult = callbackFn(...input);
+      if (tempResult instanceof Promise) {
+        result = await tempResult;
+      } else {
+        result = tempResult;
+      }
 
       this.logger?.debug(`Execution was successful, saving result to storage`);
       const idempotentResult: IdempotencyResult<ReturnType<F>> = {

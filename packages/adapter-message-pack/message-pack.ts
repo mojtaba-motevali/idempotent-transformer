@@ -1,7 +1,6 @@
 import { addExtension, Packr } from 'msgpackr';
 import {
   IdempotentSerializer,
-  Serializable,
   SERIALIZE_NAME_METADATA_KEY,
   TSerialized,
 } from '@idempotent-transformer/core';
@@ -22,26 +21,29 @@ export class MessagePack extends IdempotentSerializer {
   }
 
   configure() {
-    Array.from(IdempotentSerializer.decoratedModels.values()).forEach((Model: any) => {
-      addExtension({
-        type: 1,
-        Class: Model,
-        write: (object: unknown) => {
-          const unBoxedObject = object as unknown as Serializable;
-          const key: string = Model[SERIALIZE_NAME_METADATA_KEY];
-          return [key, unBoxedObject.toJSON()];
-        },
-        read: (data) => {
-          const key = data[0];
-          const value = data[1];
-          const Model = IdempotentSerializer.decoratedModels.get(key) as unknown as Serializable;
-          if (!Model) {
-            throw new ModelIsNotDecoratedException(key);
-          }
-          return Model.fromJSON(value);
-        },
-      });
-    });
+    Array.from(IdempotentSerializer.decoratedModels.values()).forEach(
+      ({ class: Model, serializeMethodName }) => {
+        addExtension({
+          type: 1,
+          Class: Model,
+          write: (object: unknown) => {
+            const unBoxedObject = object as any;
+            const key: string = (Model as any)[SERIALIZE_NAME_METADATA_KEY];
+            return [key, unBoxedObject[serializeMethodName]()];
+          },
+          read: (data) => {
+            const key = data[0];
+            const value = data[1];
+            const Model = IdempotentSerializer.decoratedModels.get(key);
+            if (!Model) {
+              throw new ModelIsNotDecoratedException(key);
+            }
+            const { deserializeMethodName, class: ModelClass } = Model;
+            return (ModelClass as any)[deserializeMethodName](value);
+          },
+        });
+      }
+    );
   }
 
   static getInstance() {

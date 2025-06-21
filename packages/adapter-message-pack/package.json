@@ -1,20 +1,22 @@
 {
   "name": "@idempotent-transformer/adapter-message-pack",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "scripts": {
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "workspace:*",
+    "@idempotent-transformer/core": "0.1.10",
     "msgpackr": "^1.11.4"
   },
   "devDependencies": {
-    "@types/node": "^22.15.20",
-    "@types/mocha": "^10.0.10"
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.15.20"
   },
   "publishConfig": {
     "access": "public"

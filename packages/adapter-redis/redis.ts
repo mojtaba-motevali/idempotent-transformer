@@ -1,40 +1,47 @@
-import { createClient, RedisClientOptions } from 'redis';
+import { Redis, RedisOptions } from 'ioredis';
 import { IStateStoreOptions, IdempotentStateStore } from '@idempotent-transformer/core';
 
 export class RedisAdapter extends IdempotentStateStore {
   private basePath: string;
-  private client: ReturnType<typeof createClient>;
-  constructor(url: string, options?: RedisClientOptions) {
+  private client: Redis;
+  constructor({ options, redis }: { options?: RedisOptions; redis?: Redis }) {
     super();
-    this.client = createClient({ url, ...(options ? options : {}) });
+    if (!options && !redis) {
+      throw new Error('Redis client is not provided');
+    }
+    this.client =
+      redis ??
+      new Redis({
+        ...options,
+        lazyConnect: true,
+        enableReadyCheck: true,
+      });
     this.basePath = 'idempotent-workflows';
   }
 
   async connect() {
+    if (this.isConnected()) {
+      return;
+    }
     await this.client.connect();
-    this.client.on('error', (err) => {
+    this.client.on('error', (err: Error) => {
       console.error('Redis error:', err);
     });
   }
 
   async disconnect() {
+    if (!this.isConnected()) {
+      return;
+    }
     await this.client.quit();
   }
 
-  async isConnected() {
-    return this.client.isOpen;
-  }
-
-  /**
-   * Get the expiry command for the Redis SET command.
-   * @param ttl - The TTL in milliseconds.
-   * @returns The expiry command for the Redis SET command.
-   */
-  private getExpiry(ttl: number | null): string[] {
-    if (ttl) {
-      return ['PX', ttl.toString()];
-    }
-    return [];
+  isConnected() {
+    return (
+      this.client.status === 'ready' ||
+      this.client.status === 'connecting' ||
+      this.client.status === 'connect'
+    );
   }
 
   save = async (
@@ -43,23 +50,15 @@ export class RedisAdapter extends IdempotentStateStore {
     options: IStateStoreOptions
   ): Promise<void> => {
     const buffer = Buffer.from(value);
-    await this.client.sendCommand(
-      ['SET', `${this.basePath}:${key}`, buffer, ...this.getExpiry(options.ttl)],
-      {
-        typeMapping: {
-          '36': Buffer,
-        },
-      }
-    );
+    if (options.ttl) {
+      await this.client.set(`${this.basePath}:${key}`, buffer, 'PX', options.ttl.toString());
+    } else {
+      await this.client.set(`${this.basePath}:${key}`, buffer, 'GET');
+    }
   };
 
   find = async (key: string): Promise<Uint8Array<ArrayBufferLike> | null> => {
-    const value: Buffer | null = await this.client.sendCommand(['GET', `${this.basePath}:${key}`], {
-      // By default, the value is returned as a string, so we need to map it to a Buffer to avoid data loss.
-      typeMapping: {
-        '36': Buffer,
-      },
-    });
+    const value: Buffer | null = await this.client.getBuffer(`${this.basePath}:${key}`);
     return value ? new Uint8Array(value) : null;
   };
 }

@@ -4,7 +4,7 @@ export interface MakeIdempotentInput<T extends Record<string, (input: any) => an
   functions: T;
 }
 
-export type MakeIdempotentResult<T extends Record<string, (input: any) => Promise<any>>> = {
+export type MakeIdempotentResult<T extends Record<string, (input: any) => Promise<any> | any>> = {
   [K in keyof T]: (
     ...args: [...Parameters<T[K]>, IIdempotentTaskOptions?]
   ) => Promise<ReturnType<T[K]>>;
@@ -13,7 +13,7 @@ export type MakeIdempotentResult<T extends Record<string, (input: any) => Promis
 export interface IdempotentTransformerOptions {
   /**
    * The number of milliseconds when the task result will be considered expired.
-   * @default 1 hour
+   * @default null
    */
   ttl?: number | null;
 }

@@ -31,7 +31,12 @@ let workflowTasks = {
 
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
-const storage: RedisAdapter = new RedisAdapter('redis://localhost:6379');
+const storage: RedisAdapter = new RedisAdapter({
+  options: {
+    host: 'localhost',
+    port: 6379,
+  },
+});
 
 BeforeAll(async () => {
   await IdempotentFactory.build({

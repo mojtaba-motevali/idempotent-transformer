@@ -13,7 +13,12 @@ let workflowExecution = [0, 0, 0, 0, 0, 0, 0];
 
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
-const storage: RedisAdapter = new RedisAdapter('redis://localhost:6379');
+const storage: RedisAdapter = new RedisAdapter({
+  options: {
+    host: 'localhost',
+    port: 6379,
+  },
+});
 
 let innerWorkflowTasks: {
   task5: () => Promise<any>;

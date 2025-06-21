@@ -10,7 +10,7 @@ export const IDEMPOTENT_MODULE_OPTIONS = 'IDEMPOTENT_MODULE_OPTIONS';
 export const IDEMPOTENT_TRANSFORMER = 'IDEMPOTENT_TRANSFORMER';
 
 interface IdempotentTransformerRegisterAsyncOptions {
-  useFactory: (...args: any[]) => Promise<IdempotentFactoryOptions>;
+  useFactory: (...args: any[]) => Promise<IdempotentFactoryOptions> | IdempotentFactoryOptions;
   inject?: any[];
   imports?: any[];
 }

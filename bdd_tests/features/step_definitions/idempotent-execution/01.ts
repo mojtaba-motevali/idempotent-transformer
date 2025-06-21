@@ -19,7 +19,12 @@ let taskExecutionCount = 0;
 let currentDate = new Date();
 
 BeforeAll(async () => {
-  storage = new RedisAdapter('redis://localhost:6379');
+  storage = new RedisAdapter({
+    options: {
+      host: 'localhost',
+      port: 6379,
+    },
+  });
   await IdempotentFactory.build({
     storage,
     serializer: MessagePack.getInstance(),

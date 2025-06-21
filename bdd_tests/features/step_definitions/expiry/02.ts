@@ -9,7 +9,12 @@ import { IdempotentFactory } from '@idempotent-transformer/core';
 import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
 
 let wrappedTask: (input: any, options?: IIdempotentTaskOptions) => Promise<any>;
-const storage = new RedisAdapter('redis://localhost:6379');
+const storage = new RedisAdapter({
+  options: {
+    host: 'localhost',
+    port: 6379,
+  },
+});
 const taskInput = faker.lorem.sentence();
 const taskResult = faker.lorem.sentence();
 let taskUniqueId: string;
