@@ -5,6 +5,7 @@ import {
   IdempotentSerializer,
   IdempotentStateStore,
   TSerialized,
+  SERIALIZE_NAME_METADATA_KEY,
 } from '@idempotent-transformer/core';
 import crypto from 'crypto';
 
@@ -22,16 +23,47 @@ export class JsonSerializer extends IdempotentSerializer {
     super();
   }
 
-  async serialize<T>(data: T): Promise<TSerialized> {
-    return JSON.stringify(data);
+  private replacer = (_key: string, value: any): any => {
+    if (value && typeof value === 'object') {
+      const proto = Object.getPrototypeOf(value);
+      const key = proto?.constructor?.[SERIALIZE_NAME_METADATA_KEY];
+      if (key && IdempotentSerializer.decoratedModels.has(key)) {
+        const { serializeMethodName } = IdempotentSerializer.decoratedModels.get(key)!;
+        return {
+          __type: key,
+          value: value[serializeMethodName](),
+        };
+      }
+    }
+    return value;
+  };
+
+  private reviver = (_key: string, value: any): any => {
+    if (
+      value &&
+      typeof value === 'object' &&
+      value.__type &&
+      IdempotentSerializer.decoratedModels.has(value.__type)
+    ) {
+      const { class: ModelClass, deserializeMethodName } = IdempotentSerializer.decoratedModels.get(
+        value.__type
+      )!;
+      return (ModelClass as any)[deserializeMethodName](value.value);
+    }
+    return value;
+  };
+
+  async serialize(data: any): Promise<TSerialized> {
+    return JSON.stringify(data, this.replacer);
   }
-  async deserialize<T>(data: TSerialized): Promise<T> {
-    return JSON.parse(data as string);
+
+  async deserialize(data: TSerialized): Promise<any> {
+    return JSON.parse(data as string, this.reviver);
   }
-  async configure(): Promise<void> {
-    return;
-  }
+
+  async configure(): Promise<void> {}
 }
+
 export class Storage extends IdempotentStateStore {
   constructor() {
     super();
@@ -41,10 +73,10 @@ export class Storage extends IdempotentStateStore {
   async isConnected(): Promise<boolean> {
     return true;
   }
-  async find(key: string): Promise<string | null> {
+  async find(key: string): Promise<TSerialized | null> {
     return localStorage.getItem(key);
   }
-  async save(key: string, value: string): Promise<void> {
-    localStorage.setItem(key, value);
+  async save(key: string, value: TSerialized): Promise<void> {
+    localStorage.setItem(key, value as string);
   }
 }
