@@ -1,0 +1,79 @@
+@startuml
+
+
+
+
+
+package @Idempotent-Transformer/core {
+
+class           "IdempotentFactory"
+class           IdempotentTransformer
+
+abstract class  "abstract class IdempotentSerializer"
+abstract class  "abstract class IdempotentCompressor"
+abstract class  "abstract class IdempotentCrypto"
+abstract class  "abstract class IdempotentStateStore"
+
+
+
+}
+
+
+package @Idempotent-Transformer/serializer {
+  class  "SerializerAdapter" 
+
+}
+
+package @Idempotent-Transformer/compressor {
+
+class  "CompressorAdapter"
+
+}
+
+
+package @Idempotent-Transformer/state-store {
+
+class  "StateStoreAdapter"
+
+}
+
+package @Idempotent-Transformer/crypto {
+
+class  "CryptoAdapter"
+
+}
+
+package @Idempotent-Transformer/nestjs {
+
+class  "IdempotentModuler"
+
+}
+
+
+
+
+
+
+"abstract class IdempotentSerializer" <|--	"SerializerAdapter" : Implements 
+"abstract class IdempotentCompressor" <|-- "CompressorAdapter" : Implements
+"abstract class IdempotentCrypto" <|--  "CryptoAdapter"  : Implements 
+"abstract class IdempotentStateStore" <|-- "StateStoreAdapter" : Implements 
+
+IdempotentTransformer -->		  "abstract class IdempotentSerializer" : Uses 
+IdempotentTransformer ..>	      "abstract class IdempotentCompressor" : Uses
+IdempotentTransformer -->		  "abstract class IdempotentCrypto" : Uses 
+IdempotentTransformer -->		  "abstract class IdempotentStateStore" : Uses 
+
+
+"IdempotentFactory"  <- "SerializerAdapter"  : Inject into Transformer
+"IdempotentFactory"  <- "CompressorAdapter" : Inject into Transformer
+
+"IdempotentFactory"  <- "CryptoAdapter" :  Inject into Transformer
+"IdempotentFactory"  <- "StateStoreAdapter" : Inject into Transformer
+
+IdempotentModuler -> IdempotentFactory : Uses Factory to build and configure Core
+
+
+"IdempotentFactory" -> IdempotentTransformer : Builds and configures classes for IdempotentTransformer
+
+@enduml
