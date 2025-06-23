@@ -2,9 +2,10 @@
 
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { IdempotentFactory } from '@idempotent-transformer/core';
+import { IdempotentFactory, IdempotentTransformer } from '@idempotent-transformer/core';
 import { JsonSerializer, Md5Crypto, Storage } from '@/lib/idempotent';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { IdempotentProviderContext } from '@/lib/context-api';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -21,26 +22,24 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [idempotent, setIdempotent] = useState<IdempotentTransformer | null>(null);
   useEffect(() => {
     (async () => {
       await IdempotentFactory.build({
         serializer: new JsonSerializer(),
         crypto: new Md5Crypto(),
         storage: new Storage(),
-        logger: {
-          debug: (message) => {
-            console.log(message);
-          },
-          error: (message) => {
-            console.error(message);
-          },
-        },
       });
+      setIdempotent(IdempotentTransformer.getInstance());
     })();
   }, []);
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <IdempotentProviderContext.Provider value={idempotent}>
+          {children}
+        </IdempotentProviderContext.Provider>
+      </body>
     </html>
   );
 }
