@@ -1,9 +1,21 @@
 {
-    "extends": "../tsconfig.json",
-    "compilerOptions": {
-      "outDir": "./dist",
-      "rootDir": "./"
-    },
-    "include": ["./**/*"],
-    "exclude": ["node_modules", "dist", "**/*.test.ts"]
-  } 
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "declaration": true,
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "rootDir": "."
+  },
+  "lib": ["ES2024", "DOM"], // Used by @msgpack/msgpack
+  "include": [
+    "features/**/*",
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+} 

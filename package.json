@@ -9,11 +9,6 @@
   "scripts": {
     "build": "tsc",
     "clean": "rimraf dist",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:bdd": "pnpm --filter @idempotent-transformer/bdd test",
-    "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\"",
     "prepare": "npm run clean && npm run build",
     "prepublishOnly": "npm test && npm run lint",
     "build:all": "pnpm install && pnpm -r run build",
