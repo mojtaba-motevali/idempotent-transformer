@@ -1,0 +1,22 @@
+{
+  "name": "overhead-tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node storage-test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.9.0",
+  "dependencies": {
+    "@faker-js/faker": "^9.8.0",
+    "@idempotent-transformer/adapter-crypto": "0.1.9",
+    "@idempotent-transformer/adapter-message-pack": "0.1.10",
+    "@idempotent-transformer/adapter-redis": "0.1.14",
+    "@idempotent-transformer/adapter-zstd": "0.1.8",
+    "@idempotent-transformer/core": "0.1.10",
+    "ioredis": "^5.6.1"
+  }
+}
