@@ -6,6 +6,7 @@ A TypeScript library for creating and working with idempotent transformations. I
 
 - [Core Concepts](#core-concepts)
 - [Packages](#packages)
+- [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
   - [1. Configure the IdempotentTransformer](#1-configure-the-idempotenttransformer)
@@ -41,6 +42,10 @@ This is a monorepo containing several packages.
 | `@idempotent-transformer/adapter-zstd`         | An adapter for using ZSTD for compression.                 |
 | `@idempotent-transformer/adapter-crypto`       | An adapter for using MD5 for hashing.                      |
 | `@idempotent-transformer/nestjs`               | A module for easy integration with the NestJS framework.   |
+
+## Prerequisites
+
+- TypeScript >= 5.0
 
 ## Installation
 
@@ -206,17 +211,8 @@ This repository includes examples for different frameworks:
 ## Development
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Run tests
-pnpm test
-
-# Build the library
-pnpm build
-
-# Lint the code
-pnpm lint
+pnpm build:all
 ```
 
 ## License
