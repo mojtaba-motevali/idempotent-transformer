@@ -2,6 +2,23 @@
 
 A TypeScript library for creating and working with idempotent transformations. Idempotency is the property of certain operations in mathematics and computer science whereby they can be applied multiple times without changing the result beyond the initial application. This is a crucial concept in building robust and reliable systems, especially in distributed environments where requests might be duplicated.
 
+## Table of Contents
+
+- [Core Concepts](#core-concepts)
+- [Packages](#packages)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [1. Configure the IdempotentTransformer](#1-configure-the-idempotenttransformer)
+  - [2. Get the transformer instance](#2-get-the-transformer-instance)
+  - [3. Make a function idempotent](#3-make-a-function-idempotent)
+  - [NestJS Integration](#nestjs-integration)
+- [Testing](#testing)
+  - [BDD Tests](#bdd-tests)
+  - [Overhead Tests](#overhead-tests)
+- [Examples](#examples)
+- [Development](#development)
+- [License](#license)
+
 ## Core Concepts
 
 The library is built around a few core concepts:
@@ -153,6 +170,38 @@ export class AppService {
   // ... use the transformer
 }
 ```
+
+## Testing
+
+### BDD Tests
+
+To run the BDD tests, navigate to the `bdd_tests` directory and run the tests:
+
+```bash
+cd bdd_tests
+npm install
+npm test
+```
+
+### Overhead Tests
+
+These tests measure the storage size impact. You'll need a running Redis instance to execute them.
+
+To run the overhead tests:
+
+```bash
+# Make sure redis is running
+node overhead_tests/experiments/[test_name]
+```
+
+Replace `[test_name]` with the experiment file you want to run (e.g., `compression-disabled-msg-json.experiment.js`).
+
+## Examples
+
+This repository includes examples for different frameworks:
+
+- **nestjs**: A complete NestJS application showing how to integrate the transformer.
+- **nextjs**: A Next.js application demonstrating usage in a React-based framework.
 
 ## Development
 
