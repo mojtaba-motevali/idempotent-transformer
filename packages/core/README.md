@@ -1,5 +1,7 @@
 # @idempotent-transformer/core
 
+For more comprehensive documentation, please see the main [README](https://github.com/mojtaba-motevali/idempotent-transformer).
+
 This is the core package for the `idempotent-transformer` library. It contains the main logic, interfaces, and base classes for creating and managing idempotent operations.
 
 ## Core Components
