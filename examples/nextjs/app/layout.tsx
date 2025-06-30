@@ -3,7 +3,8 @@
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { IdempotentFactory, IdempotentTransformer } from '@idempotent-transformer/core';
-import { JsonSerializer, Md5Crypto, Storage } from '@/lib/idempotent';
+import { JsonSerializer, Md5Crypto } from '@/lib/idempotent';
+import { InMemoryStorage } from '@/lib/storage';
 import { useEffect, useState } from 'react';
 import { IdempotentProviderContext } from '@/lib/context-api';
 
@@ -28,7 +29,7 @@ export default function RootLayout({
       await IdempotentFactory.build({
         serializer: new JsonSerializer(),
         crypto: new Md5Crypto(),
-        storage: new Storage(),
+        storage: new InMemoryStorage(),
       });
       setIdempotent(IdempotentTransformer.getInstance());
     })();

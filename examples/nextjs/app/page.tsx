@@ -1,19 +1,18 @@
 'use client';
 
-import { IdempotentTransformer } from '@idempotent-transformer/core';
 import { useContext, useRef, useState } from 'react';
 import styles from './page.module.css';
-import { IdempotentProviderContext } from '@/lib/context-api';
+// import { IdempotentProviderContext } from '@/lib/context-api';
 
-const mutationApiCall = async (): Promise<number> => {
+const uploadPhoto = async (file: File): Promise<string> => {
   return new Promise((resolve) => {
-    setTimeout(() => resolve(Math.floor(Math.random() * 100)), 500);
+    setTimeout(() => resolve(file.name), 1000);
   });
 };
 
-const mutationApiCall2 = async (): Promise<number> => {
+const editProfile = async (name: string): Promise<string> => {
   return new Promise((resolve) => {
-    setTimeout(() => resolve(Math.floor(Math.random() * 100)), 500);
+    setTimeout(() => resolve(name), 500);
   });
 };
 
@@ -21,97 +20,96 @@ const generateRandomId = () => {
   return Math.random().toString(36).substring(2, 15);
 };
 
-interface IdempotencyCall {
-  functionName: string;
-  input: any[];
-  output: any;
-  fromCache: boolean;
-  timestamp: string;
-}
-
 export default function Home() {
   const pageRef = useRef<string | null>(null);
-  const idempotentTransformer = useContext(IdempotentProviderContext);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [file, setFile] = useState<File | null>(null);
+  const [photoResult, setPhotoResult] = useState<string | null>(null);
+  const [profileResult, setProfileResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState('');
+
+  // const idempotentTransformer = useContext(IdempotentProviderContext);
   if (pageRef.current === null) {
     pageRef.current = generateRandomId();
   }
-
-  const [count, setCount] = useState(0);
-  const [count2, setCount2] = useState(0);
-  const [history, setHistory] = useState<IdempotencyCall[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const handleClick = async () => {
+  const handleEditProfile = async () => {
     setLoading(true);
 
-    const idempotent = await idempotentTransformer!.makeIdempotent(pageRef.current!, {
-      mutationApiCall,
-      mutationApiCall2,
-    });
+    // const idempotent = await idempotentTransformer!.makeIdempotent(pageRef.current!, {
+    //   uploadPhoto,
+    //   editProfile,
+    // });
 
-    const result = await idempotent.mutationApiCall();
-    setCount(result as number);
-    setHistory((prev) => [
-      {
-        functionName: 'mutationApiCall',
-        input: [],
-        output: result,
-        fromCache: false,
-        timestamp: new Date().toLocaleTimeString(),
-      },
-      ...prev,
-    ]);
+    const result = await uploadPhoto(file!);
+    setPhotoResult(result);
 
-    const result2 = await idempotent.mutationApiCall2();
+    const result2 = await editProfile(name);
+    setProfileResult(result2);
 
-    setCount2(result2 as number);
-    setHistory((prev) => [
-      {
-        functionName: 'mutationApiCall2',
-        input: [],
-        output: result2,
-        fromCache: false,
-        timestamp: new Date().toLocaleTimeString(),
-      },
-      ...prev,
-    ]);
+    // const result = await idempotent.uploadPhoto(file!);
+
+    // setPhotoResult(result);
+    // const result2 = await idempotent.editProfile(name);
+    // setProfileResult(result2);
 
     setLoading(false);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFile(e.target.files?.[0] || null);
+  };
+
   return (
     <div className={styles.container}>
-      <h1>Hello World</h1>
       <div className={styles.historySection}>
-        <h2>Idempotency Call History</h2>
+        <h2>User Profile</h2>
         {history.length === 0 && <p className={styles.empty}>No idempotent calls yet.</p>}
-        <div className={styles.historyList}>
-          {history.map((call, idx) => (
-            <div key={idx} className={styles.historyCard}>
-              <div className={styles.cardHeader}>
-                <span className={styles.functionName}>{call.functionName}</span>
-                <span className={call.fromCache ? styles.cacheBadge : styles.freshBadge}>
-                  {call.fromCache ? 'From Cache' : 'Fresh'}
-                </span>
-              </div>
-              <div className={styles.cardBody}>
-                <div>
-                  <strong>Input:</strong> {JSON.stringify(call.input)}
-                </div>
-                <div>
-                  <strong>Output:</strong> {JSON.stringify(call.output)}
-                </div>
-                <div className={styles.timestamp}>{call.timestamp}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className={styles.historyList}></div>
       </div>
-      <button className={styles.ctaButton} onClick={handleClick} disabled={loading}>
-        {loading ? 'Processing...' : 'Click me'}
-      </button>
-      <p>Count: {count}</p>
-      <p>Count2: {count2}</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleEditProfile();
+        }}
+        style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: 400 }}
+      >
+        <div className={styles.fileInputContainer}>
+          <button
+            className={styles.fileInputButton}
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Upload Photo
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+          {file && <span className={styles.fileName}>{file.name}</span>}
+        </div>
+        <input
+          type="text"
+          placeholder="Enter your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={styles.nameInput}
+        />
+        <button className={styles.ctaButton} type="submit" disabled={loading || !file}>
+          {loading ? 'Processing...' : 'Submit'}
+        </button>
+      </form>
+      <p>
+        <span className={styles.label}>Upload photo result:</span>{' '}
+        <span className={styles.result}>{photoResult}</span>
+      </p>
+      <p>
+        <span className={styles.label}>Edit profile result:</span>{' '}
+        <span className={styles.result}>{profileResult}</span>
+      </p>
     </div>
   );
 }

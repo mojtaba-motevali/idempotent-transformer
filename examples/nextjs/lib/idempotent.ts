@@ -63,20 +63,3 @@ export class JsonSerializer extends IdempotentSerializer {
 
   async configure(): Promise<void> {}
 }
-
-export class Storage extends IdempotentStateStore {
-  constructor() {
-    super();
-  }
-  async connect(): Promise<void> {}
-  async disconnect(): Promise<void> {}
-  async isConnected(): Promise<boolean> {
-    return true;
-  }
-  async find(key: string): Promise<TSerialized | null> {
-    return localStorage.getItem(key);
-  }
-  async save(key: string, value: TSerialized): Promise<void> {
-    localStorage.setItem(key, value as string);
-  }
-}
