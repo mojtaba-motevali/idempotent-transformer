@@ -13,5 +13,5 @@ export abstract class IdempotentSerializer {
   static decoratedModels = new Map<string, TDecoratedModel>();
   abstract serialize<T>(data: T): Promise<TSerialized>;
   abstract deserialize<T>(data: TSerialized): Promise<T>;
-  abstract configure(): void;
+  abstract configure(models: Map<string, TDecoratedModel>): void;
 }

@@ -6,7 +6,6 @@ import {
   IdempotentStateStore,
   TSerialized,
 } from '../base/';
-import { IdempotencyConflictException } from './exceptions/conflict.exception';
 import {
   IdempotencyResult,
   IdempotentTransformerInput,
@@ -107,7 +106,9 @@ export class IdempotentTransformer {
     value: TSerialized
   ): Promise<TSerialized> {
     if (this.compressor && shouldCompress) {
-      return this.compressor.compress(value);
+      const compressed = await this.compressor.compress(value);
+      this.logger?.debug(`Compressed result: ${compressed}`);
+      return compressed;
     }
     return value;
   }
@@ -163,10 +164,6 @@ export class IdempotentTransformer {
         workflowId,
         contextName,
       });
-      /**
-       * The input hash is a hash of the input.
-       */
-      const inputHash = await this.createHash(input);
 
       this.logger?.debug(`Task unique id: ${taskUniqueId}`);
       const cachedResult = await this.storage.find(taskUniqueId);
@@ -177,10 +174,6 @@ export class IdempotentTransformer {
         const deserializedResult =
           await this.serializer?.deserialize<IdempotencyResult<ReturnType<F>>>(decompressedResult);
 
-        if (deserializedResult.in !== inputHash) {
-          this.logger?.debug(`Input hash mismatch for task ${taskUniqueId}`);
-          throw new IdempotencyConflictException();
-        }
         this.logger?.debug(`Deserialized result: ${deserializedResult}`);
         return deserializedResult.re;
       }
@@ -195,7 +188,6 @@ export class IdempotentTransformer {
       this.logger?.debug(`Execution was successful, saving result to storage`);
       const idempotentResult: IdempotencyResult<ReturnType<F>> = {
         re: result,
-        in: inputHash,
       };
 
       const serializedIdempotentResult = await this.serializer.serialize(idempotentResult);
@@ -206,8 +198,6 @@ export class IdempotentTransformer {
         !!options?.shouldCompress,
         serializedIdempotentResult
       );
-
-      this.logger?.debug(`Compressed result: ${compressedIdempotentResult}`);
 
       await this.storage.save(taskUniqueId, compressedIdempotentResult, {
         ttl: ttl ?? null,

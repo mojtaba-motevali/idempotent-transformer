@@ -7,7 +7,7 @@ export class ZstdCompressor extends IdempotentCompressor {
     super();
   }
 
-  compress = async (data: TSerialized): Promise<TSerialized> => {
+  async compress(data: TSerialized): Promise<TSerialized> {
     return new Promise((resolve, reject) => {
       zstdCompress(data, (err, result) => {
         if (err) {
@@ -16,9 +16,9 @@ export class ZstdCompressor extends IdempotentCompressor {
         resolve(result);
       });
     });
-  };
+  }
 
-  decompress = async (data: TSerialized): Promise<TSerialized> => {
+  async decompress(data: TSerialized): Promise<TSerialized> {
     return new Promise((resolve, reject) => {
       zstdDecompress(data, (err, result) => {
         if (err) {
@@ -27,12 +27,12 @@ export class ZstdCompressor extends IdempotentCompressor {
         resolve(result);
       });
     });
-  };
+  }
 
-  isCompressed = (data: TSerialized): boolean => {
+  isCompressed(data: TSerialized): boolean {
     return (
       data instanceof Uint8Array &&
       data.slice(0, 4).every((value, index) => value === this.magic[index])
     );
-  };
+  }
 }

@@ -2,6 +2,7 @@ import { addExtension, Packr } from 'msgpackr';
 import {
   IdempotentSerializer,
   SERIALIZE_NAME_METADATA_KEY,
+  TDecoratedModel,
   TSerialized,
 } from '@idempotent-transformer/core';
 import { ModelIsNotDecoratedException } from './errors';
@@ -20,30 +21,28 @@ export class MessagePack extends IdempotentSerializer {
     });
   }
 
-  configure() {
-    Array.from(IdempotentSerializer.decoratedModels.values()).forEach(
-      ({ class: Model, serializeMethodName }) => {
-        addExtension({
-          type: 1,
-          Class: Model,
-          write: (object: unknown) => {
-            const unBoxedObject = object as any;
-            const key: string = (Model as any)[SERIALIZE_NAME_METADATA_KEY];
-            return [key, unBoxedObject[serializeMethodName]()];
-          },
-          read: (data) => {
-            const key = data[0];
-            const value = data[1];
-            const Model = IdempotentSerializer.decoratedModels.get(key);
-            if (!Model) {
-              throw new ModelIsNotDecoratedException(key);
-            }
-            const { deserializeMethodName, class: ModelClass } = Model;
-            return (ModelClass as any)[deserializeMethodName](value);
-          },
-        });
-      }
-    );
+  configure(models: Map<string, TDecoratedModel>) {
+    Array.from(models.values()).forEach(({ class: Model, serializeMethodName }) => {
+      addExtension({
+        type: 1,
+        Class: Model,
+        write: (object: unknown) => {
+          const unBoxedObject = object as any;
+          const key: string = (Model as any)[SERIALIZE_NAME_METADATA_KEY];
+          return [key, unBoxedObject[serializeMethodName]()];
+        },
+        read: (data) => {
+          const key = data[0];
+          const value = data[1];
+          const Model = models.get(key);
+          if (!Model) {
+            throw new ModelIsNotDecoratedException(key);
+          }
+          const { deserializeMethodName, class: ModelClass } = Model;
+          return (ModelClass as any)[deserializeMethodName](value);
+        },
+      });
+    });
   }
 
   static getInstance() {

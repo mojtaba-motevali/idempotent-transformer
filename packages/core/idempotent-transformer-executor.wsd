@@ -5,13 +5,9 @@ Caller -> Transformed_Func: Execute a task
 Transformed_Func -> Serialize_Module: Serialize Workflow_ID/Context_Name
 Serialize_Module -> Transformed_Func: Serialized Result
 
-Transformed_Func -> Serialize_Module: Serialize Input
-Serialize_Module -> Transformed_Func: Serialized Result
-
 
 Transformed_Func -> Crypto_Module: Form task_id by hashing workflow_ID and Context_Name
 Crypto_Module -> Transformed_Func: Hash Result
-
 
 
 Transformed_Func -> State_Store_Module: Check if there is a State Data with generated task_id 
@@ -30,7 +26,7 @@ Transformed_Func -> Caller: Return the State Data
 
 Transformed_Func -> Transformed_Func: Execute the given task
 
-Transformed_Func -> Serialize_Module: Serialize result as Data State and Input hash
+Transformed_Func -> Serialize_Module: Serialize result as Data State
 
 Serialize_Module -> Transformed_Func: Return serialized Data State
 

@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "jest",
     "clean": "rimraf dist",
     "prepare": "npm run clean && npm run build",
     "prepublishOnly": "npm test && npm run lint",
