@@ -1,10 +1,8 @@
 import {
-  IdempotentCompressor,
   IdempotentCrypto,
   IdempotentLogger,
   IdempotentSerializer,
   IdempotentStateStore,
-  TSerialized,
 } from '../base/';
 import {
   IdempotencyResult,
@@ -15,18 +13,15 @@ import {
 } from './interfaces';
 
 export class IdempotentTransformer {
-  private static instance: IdempotentTransformer;
   private storage: IdempotentStateStore;
   private serializer: IdempotentSerializer;
-  private compressor?: IdempotentCompressor;
   private logger?: IdempotentLogger;
   private crypto: IdempotentCrypto;
 
-  private constructor(input: IdempotentTransformerInput) {
-    const { storage, serializer, compressor, log, crypto } = input;
+  constructor(input: IdempotentTransformerInput) {
+    const { storage, serializer, log, crypto } = input;
     this.storage = storage;
     this.serializer = serializer;
-    this.compressor = compressor;
     this.logger = log;
     this.crypto = crypto;
   }
@@ -41,29 +36,6 @@ export class IdempotentTransformer {
     if (typeof lastArg !== 'object' || lastArg === null) return false;
     const optionKeys: (keyof IIdempotentTaskOptions)[] = ['shouldCompress'];
     return optionKeys.some((key) => key in lastArg);
-  }
-
-  static configure(input: IdempotentTransformerInput) {
-    IdempotentTransformer.instance = new IdempotentTransformer(input);
-  }
-
-  static getInstance(input?: IdempotentTransformerInput) {
-    if (!IdempotentTransformer.instance && input) {
-      const { storage, serializer, compressor, log, crypto } = input;
-      IdempotentTransformer.instance = new IdempotentTransformer({
-        storage,
-        serializer,
-        compressor,
-        log,
-        crypto,
-      });
-    }
-    if (!IdempotentTransformer.instance) {
-      throw new Error(
-        'IdempotentTransformer not configured, make sure you have used IdempotentFactory.build() to configure the transformer'
-      );
-    }
-    return IdempotentTransformer.instance;
   }
 
   /**
@@ -88,7 +60,11 @@ export class IdempotentTransformer {
   ): Promise<MakeIdempotentResult<T>> {
     const callbacks = functions as Record<string, (...args: any[]) => Promise<any>>;
 
-    const result = {} as MakeIdempotentResult<T>;
+    const result = {
+      complete: async () => {
+        await this.storage.complete(workflowId);
+      },
+    } as MakeIdempotentResult<T>;
 
     for (const key of Object.keys(callbacks) as Array<keyof T>) {
       // The type of callbacks[key] is T[key], which is (...args: any[]) => Promise<any>
@@ -99,25 +75,6 @@ export class IdempotentTransformer {
     }
 
     return result;
-  }
-
-  private async compressIfEnabled(
-    shouldCompress: boolean,
-    value: TSerialized
-  ): Promise<TSerialized> {
-    if (this.compressor && shouldCompress) {
-      const compressed = await this.compressor.compress(value);
-      this.logger?.debug(`Compressed result: ${compressed}`);
-      return compressed;
-    }
-    return value;
-  }
-
-  private async decompressIfCompressed(value: TSerialized): Promise<TSerialized> {
-    if (this.compressor && this.compressor.isCompressed(value)) {
-      return this.compressor.decompress(value);
-    }
-    return value;
   }
 
   async createHash<T>(value: T): Promise<string> {
@@ -170,13 +127,19 @@ export class IdempotentTransformer {
       this.logger?.debug(`Cached result: ${cachedResult}`);
       if (cachedResult) {
         this.logger?.debug(`Found cached result for task ${taskUniqueId}`);
-        const decompressedResult = await this.decompressIfCompressed(cachedResult);
         const deserializedResult =
-          await this.serializer?.deserialize<IdempotencyResult<ReturnType<F>>>(decompressedResult);
+          await this.serializer?.deserialize<IdempotencyResult<ReturnType<F>>>(cachedResult);
 
         this.logger?.debug(`Deserialized result: ${deserializedResult}`);
         return deserializedResult.re;
       }
+
+      /**
+       * ================================================
+       * Execution
+       * ================================================
+       */
+
       let result: ReturnType<F>;
       const tempResult = callbackFn(...input);
       if (tempResult instanceof Promise) {
@@ -184,6 +147,12 @@ export class IdempotentTransformer {
       } else {
         result = tempResult;
       }
+
+      /**
+       * ================================================
+       * Saving result
+       * ================================================
+       */
 
       this.logger?.debug(`Execution was successful, saving result to storage`);
       const idempotentResult: IdempotencyResult<ReturnType<F>> = {
@@ -194,12 +163,7 @@ export class IdempotentTransformer {
 
       this.logger?.debug(`Serialized result: ${serializedIdempotentResult}`);
 
-      const compressedIdempotentResult = await this.compressIfEnabled(
-        !!options?.shouldCompress,
-        serializedIdempotentResult
-      );
-
-      await this.storage.save(taskUniqueId, compressedIdempotentResult, {
+      await this.storage.save(taskUniqueId, serializedIdempotentResult, {
         ttl: ttl ?? null,
         context: {
           taskName: callbackFn.name,

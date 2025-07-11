@@ -1,4 +1,3 @@
-export { IdempotentCompressor } from './compressor';
 export { IdempotentCrypto } from './crypto';
 export { IdempotentLogger } from './logger';
 export {

@@ -1,4 +1,4 @@
-export abstract class IdempotentLogger {
-  abstract error(message: string): void;
-  abstract debug(message: string): void;
+export interface IdempotentLogger {
+  error(message: string): void;
+  debug(message: string): void;
 }

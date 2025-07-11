@@ -1,6 +1,6 @@
+import { decoratedModels } from './decorated-models';
 import { SerializationContractViolatedException } from './errors/serialization-contract-violated.exception';
 import { throwIfTrue } from './lib/throw-if-true';
-import { IdempotentSerializer } from './serializer';
 
 export const SERIALIZE_NAME_METADATA_KEY = 'serialize_key';
 
@@ -39,7 +39,7 @@ export function Serialize({
       configurable: false,
       enumerable: false,
     });
-    IdempotentSerializer.decoratedModels.set(name, {
+    decoratedModels.set(name, {
       class: target,
       serializeMethodName,
       deserializeMethodName,

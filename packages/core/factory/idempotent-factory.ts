@@ -1,5 +1,4 @@
 import {
-  IdempotentCompressor,
   IdempotentCrypto,
   IdempotentLogger,
   IdempotentSerializer,
@@ -12,7 +11,6 @@ export interface IdempotentFactoryOptions {
   storage: IdempotentStateStore;
   logger?: IdempotentLogger | null;
   serializer: IdempotentSerializer;
-  compressor?: IdempotentCompressor;
   crypto: IdempotentCrypto;
 }
 
@@ -21,18 +19,15 @@ export class IdempotentFactory {
     storage,
     logger = new ConsoleLogger(),
     serializer,
-    compressor,
     crypto,
   }: IdempotentFactoryOptions) {
     if (!(await storage.isConnected())) {
       await storage.connect();
     }
-    serializer.configure(IdempotentSerializer.decoratedModels);
-    IdempotentTransformer.configure({
+    return new IdempotentTransformer({
       storage,
       log: logger ?? undefined,
       serializer,
-      compressor,
       crypto,
     });
   }

@@ -8,6 +8,8 @@ export type MakeIdempotentResult<T extends Record<string, (input: any) => Promis
   [K in keyof T]: (
     ...args: [...Parameters<T[K]>, IIdempotentTaskOptions?]
   ) => Promise<ReturnType<T[K]>>;
+} & {
+  complete: () => Promise<void>;
 };
 
 export interface IdempotentTransformerOptions {

@@ -1,5 +1,4 @@
 import {
-  IdempotentCompressor,
   IdempotentCrypto,
   IdempotentLogger,
   IdempotentSerializer,
@@ -22,11 +21,6 @@ export interface IdempotentTransformerInput {
    * @default MessagePack
    */
   serializer: IdempotentSerializer;
-  /**
-   * The compressor to use for the idempotent transformer
-   * @default zstd
-   */
-  compressor?: IdempotentCompressor;
 
   /**
    * The crypto to use for the idempotent transformer

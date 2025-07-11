@@ -18,10 +18,12 @@ export interface IStateStoreOptions {
   workflowId: string;
 }
 
-export abstract class IdempotentStateStore {
-  abstract connect(): Promise<void> | void;
-  abstract disconnect(): Promise<void> | void;
-  abstract isConnected(): Promise<boolean> | boolean;
-  abstract find(id: string): Promise<TSerialized | null> | TSerialized | null;
-  abstract save(id: string, value: TSerialized, options: IStateStoreOptions): Promise<void> | void;
+export interface IdempotentStateStore {
+  connect(): Promise<void> | void;
+  disconnect(): Promise<void> | void;
+  isConnected(): Promise<boolean> | boolean;
+  find(id: string): Promise<TSerialized | null> | TSerialized | null;
+  save(id: string, value: TSerialized, options: IStateStoreOptions): Promise<void> | void;
+  complete(workflowId: string): Promise<void> | void;
+  cleanAll(beforeDate: Date): Promise<void> | void;
 }
