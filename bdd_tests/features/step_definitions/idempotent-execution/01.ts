@@ -1,36 +1,29 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import { IdempotentTransformer, IIdempotentTaskOptions } from '@idempotent-transformer/core';
-import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
-import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
-import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
+import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
+import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
 
 let wrappedTask: (input: any, options?: IIdempotentTaskOptions) => Promise<any>;
 let asyncTask: (input: any) => Promise<any>;
 let firstResult: any;
 let secondResult: any;
 let input = faker.string.uuid();
-let storage: RedisAdapter;
+let storage: PostgresAdapter;
 const workflowId = faker.string.uuid();
 let taskExecutionCount = 0;
 let currentDate = new Date();
-
+let transformer: IdempotentTransformer;
 BeforeAll(async () => {
-  storage = new RedisAdapter({
-    options: {
-      host: 'localhost',
-      port: 6379,
-    },
-  });
-  await IdempotentFactory.build({
+  storage = new PostgresAdapter('postgres://postgres:postgres@localhost:5432/postgres');
+  transformer = await IdempotentFactory.getInstance().build({
     storage,
     serializer: MessagePack.getInstance(),
-    compressor: new ZstdCompressor(),
     logger: null,
-    crypto: new Md5Adapter(),
+    checksumGenerator: new CheckSumGenerator(),
   });
 });
 
@@ -53,7 +46,7 @@ Given('an asynchronous task that returns a value', async function () {
   };
 });
 When('I wrap the task with the idempotent execution wrapper', async function () {
-  const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+  const wrapped = await transformer.makeIdempotent(workflowId, {
     task: asyncTask,
   });
   wrappedTask = wrapped.task;

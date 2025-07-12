@@ -1,14 +1,13 @@
 import {
-  IdempotentCrypto,
+  IdempotentCheckSumGenerator,
   IdempotentLogger,
   IdempotentSerializer,
   IdempotentStateStore,
-} from '../base/';
+} from '../base';
 import {
   IdempotencyResult,
   IdempotentTransformerInput,
   IdempotentTransformerOptions,
-  IIdempotentTaskOptions,
   MakeIdempotentResult,
 } from './interfaces';
 
@@ -16,26 +15,14 @@ export class IdempotentTransformer {
   private storage: IdempotentStateStore;
   private serializer: IdempotentSerializer;
   private logger?: IdempotentLogger;
-  private crypto: IdempotentCrypto;
+  private checksumGenerator: IdempotentCheckSumGenerator;
 
   constructor(input: IdempotentTransformerInput) {
-    const { storage, serializer, log, crypto } = input;
+    const { storage, serializer, log, checksumGenerator } = input;
     this.storage = storage;
     this.serializer = serializer;
     this.logger = log;
-    this.crypto = crypto;
-  }
-
-  /**
-   * Checks if the last argument in the array matches the shape of IOptions.
-   * Returns true if the last argument is an object and has at least one property from IOptions.
-   */
-  private isLastArgOptions(args: any[]): boolean {
-    if (!args.length) return false;
-    const lastArg = args[args.length - 1];
-    if (typeof lastArg !== 'object' || lastArg === null) return false;
-    const optionKeys: (keyof IIdempotentTaskOptions)[] = ['shouldCompress'];
-    return optionKeys.some((key) => key in lastArg);
+    this.checksumGenerator = checksumGenerator;
   }
 
   /**
@@ -54,32 +41,47 @@ export class IdempotentTransformer {
   async makeIdempotent<T extends Record<string, (...args: any[]) => Promise<any> | any>>(
     workflowId: string,
     functions: T,
-    options: IdempotentTransformerOptions = {
-      ttl: null,
-    }
+    { prefetchCheckpoints = false, retentionTime }: IdempotentTransformerOptions = {}
   ): Promise<MakeIdempotentResult<T>> {
+    // 1 day
+    const expiredAt = new Date(Date.now() + (retentionTime || 1000 * 60 * 60 * 24));
     const callbacks = functions as Record<string, (...args: any[]) => Promise<any>>;
 
     const result = {
       complete: async () => {
-        await this.storage.complete(workflowId);
+        await this.storage.complete(workflowId, expiredAt.getTime());
       },
     } as MakeIdempotentResult<T>;
 
-    for (const key of Object.keys(callbacks) as Array<keyof T>) {
-      // The type of callbacks[key] is T[key], which is (...args: any[]) => Promise<any>
-      // We need to ensure the result[key] is of type (...args: [...Parameters<T[key]>, (IOptions | undefined)?]) => Promise<ReturnType<T[key]>>
-      result[key] = this.createTransformer(workflowId, key as string, callbacks[key as string], {
-        ttl: options.ttl,
-      }) as MakeIdempotentResult<T>[typeof key];
+    let results: IdempotencyResult[] = [];
+    if (prefetchCheckpoints) {
+      results = await this.storage.findAll(workflowId);
+    }
+    const functionNames = Object.keys(callbacks);
+
+    for (const key of functionNames as Array<keyof T>) {
+      let taskResult: IdempotencyResult | undefined = undefined;
+      if (prefetchCheckpoints) {
+        const taskId = await this.createCheckSum({
+          workflowId,
+          contextName: key as string,
+        });
+        taskResult = results.find((result) => result.taskId === taskId);
+      }
+      result[key] = this.createTransformer(
+        workflowId,
+        key as string,
+        callbacks[key as string],
+        taskResult
+      ) as MakeIdempotentResult<T>[typeof key];
     }
 
     return result;
   }
 
-  async createHash<T>(value: T): Promise<string> {
+  async createCheckSum<T>(value: T): Promise<string | number> {
     const serializedValue = await this.serializer.serialize(value);
-    return this.crypto.createHash(serializedValue);
+    return this.checksumGenerator.generate(serializedValue);
   }
 
   /**
@@ -92,7 +94,7 @@ export class IdempotentTransformer {
       workflowId: string,
       contextName: string,
       callbackFn: F,
-      { ttl }: IdempotentTransformerOptions
+      previousResult: Pick<IdempotencyResult, 'value' | 'taskId'> | null = null
     ) =>
     /**
      * The transformed task
@@ -100,38 +102,45 @@ export class IdempotentTransformer {
      * @param options - The options for the transformer
      * @returns The result of the transformation function
      */
-    async (...args: [...Parameters<F>, IIdempotentTaskOptions?]): Promise<ReturnType<F>> => {
-      const isLastArgOptions = this.isLastArgOptions(args);
-      let input: Parameters<F>;
-      let options: IIdempotentTaskOptions | undefined;
-      if (isLastArgOptions) {
-        options = args.pop() as IIdempotentTaskOptions;
-        input = args as unknown as Parameters<F>;
-      } else {
-        input = args as unknown as Parameters<F>;
-      }
-
+    async (...args: [...Parameters<F>]): Promise<ReturnType<F>> => {
+      const input = args as unknown as Parameters<F>;
+      let taskUniqueId = previousResult?.taskId || null;
+      let cachedResult: IdempotencyResult | null = previousResult
+        ? {
+            taskId: previousResult.taskId,
+            workflowId,
+            value: previousResult.value,
+          }
+        : null;
       this.logger?.debug(
         `Creating transformer for workflow ${workflowId} and context ${contextName}`
       );
       /**
        * The task unique id is a hash of the workflow id and the idempotency key.
        */
-      const taskUniqueId = await this.createHash({
-        workflowId,
-        contextName,
-      });
+      if (!taskUniqueId) {
+        taskUniqueId = (
+          await this.createCheckSum({
+            workflowId,
+            contextName,
+          })
+        ).toString();
+      }
 
       this.logger?.debug(`Task unique id: ${taskUniqueId}`);
-      const cachedResult = await this.storage.find(taskUniqueId);
+      if (!cachedResult) {
+        cachedResult = await this.storage.find({ taskId: taskUniqueId, workflowId });
+      }
+
       this.logger?.debug(`Cached result: ${cachedResult}`);
       if (cachedResult) {
         this.logger?.debug(`Found cached result for task ${taskUniqueId}`);
-        const deserializedResult =
-          await this.serializer?.deserialize<IdempotencyResult<ReturnType<F>>>(cachedResult);
+        const deserializedResult = await this.serializer?.deserialize<ReturnType<F>>(
+          cachedResult.value
+        );
 
         this.logger?.debug(`Deserialized result: ${deserializedResult}`);
-        return deserializedResult.re;
+        return deserializedResult;
       }
 
       /**
@@ -155,21 +164,21 @@ export class IdempotentTransformer {
        */
 
       this.logger?.debug(`Execution was successful, saving result to storage`);
-      const idempotentResult: IdempotencyResult<ReturnType<F>> = {
-        re: result,
-      };
+      const idempotentResult: ReturnType<F> = result;
 
       const serializedIdempotentResult = await this.serializer.serialize(idempotentResult);
 
       this.logger?.debug(`Serialized result: ${serializedIdempotentResult}`);
 
-      await this.storage.save(taskUniqueId, serializedIdempotentResult, {
-        ttl: ttl ?? null,
-        context: {
-          taskName: callbackFn.name,
-        },
-        workflowId,
-      });
+      await this.storage.save(
+        { taskId: taskUniqueId, workflowId, value: serializedIdempotentResult },
+        {
+          context: {
+            taskName: contextName,
+          },
+          workflowId,
+        }
+      );
       this.logger?.debug(`Saved result for task ${taskUniqueId}`);
       return result;
     };

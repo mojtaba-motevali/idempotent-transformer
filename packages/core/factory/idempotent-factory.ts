@@ -1,5 +1,5 @@
 import {
-  IdempotentCrypto,
+  IdempotentCheckSumGenerator,
   IdempotentLogger,
   IdempotentSerializer,
   IdempotentStateStore,
@@ -11,15 +11,26 @@ export interface IdempotentFactoryOptions {
   storage: IdempotentStateStore;
   logger?: IdempotentLogger | null;
   serializer: IdempotentSerializer;
-  crypto: IdempotentCrypto;
+  checksumGenerator: IdempotentCheckSumGenerator;
 }
 
 export class IdempotentFactory {
-  public static async build({
+  private static instance: IdempotentFactory;
+
+  private constructor() {}
+
+  public static getInstance() {
+    if (!this.instance) {
+      this.instance = new IdempotentFactory();
+    }
+    return this.instance;
+  }
+
+  public async build({
     storage,
     logger = new ConsoleLogger(),
     serializer,
-    crypto,
+    checksumGenerator,
   }: IdempotentFactoryOptions) {
     if (!(await storage.isConnected())) {
       await storage.connect();
@@ -28,7 +39,7 @@ export class IdempotentFactory {
       storage,
       log: logger ?? undefined,
       serializer,
-      crypto,
+      checksumGenerator,
     });
   }
 }

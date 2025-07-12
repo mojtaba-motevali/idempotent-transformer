@@ -1,71 +1,91 @@
-import { AfterAll, BeforeAll, Given, Then, When } from '@cucumber/cucumber';
+import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
-import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
-import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
+import { IdempotentTransformer } from '@idempotent-transformer/core';
 import { faker } from '@faker-js/faker';
-import {
-  IdempotentFactory,
-  IdempotentTransformer,
-  IdempotencyConflictException,
-} from '@idempotent-transformer/core';
-import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
+import { IdempotentFactory } from '@idempotent-transformer/core';
+import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
+import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 
-let asyncTask: (input: any) => Promise<any>;
-const workflowId = faker.string.uuid();
-const input = faker.string.uuid();
-const storage = new RedisAdapter({
-  options: {
-    host: 'localhost',
-    port: 6379,
+let retryCount = 0;
+let workflowExecution = [0, 0, 0, 0];
+let workflowTasks = {
+  task1: async (input: any) => {
+    ++workflowExecution[0];
+    return input;
   },
-});
+  task2: async (input: any) => {
+    ++workflowExecution[1];
+    return input;
+  },
+  task3: async (input: any) => {
+    if (retryCount < 1) throw new Error('Task 3 failed');
+    ++workflowExecution[2];
+  },
+  task4: async (input: any) => {
+    ++workflowExecution[3];
+    return input;
+  },
+};
 
+let transformer: IdempotentTransformer;
+
+const input = faker.string.uuid();
+const idempotentWorkflowKey = faker.string.uuid();
+const storage: PostgresAdapter = new PostgresAdapter(
+  'postgres://postgres:postgres@localhost:5432/postgres'
+);
 BeforeAll(async () => {
-  await IdempotentFactory.build({
+  transformer = await IdempotentFactory.getInstance().build({
     storage,
     serializer: MessagePack.getInstance(),
-    compressor: new ZstdCompressor(),
     logger: null,
-    crypto: new Md5Adapter(),
+    checksumGenerator: new CheckSumGenerator(),
   });
 });
 
-Given('an asynchronous task that accepts parameters', async function () {
-  asyncTask = async (input: any) => {
-    return {
-      a: input,
-    };
-  };
+// Given a workflow including 4 tasks
+// When I execute 2 tasks successfully and third one fails
+// Then I retry execution of the all tasks
+// Then the library does not execute the first two tasks and successfully executes all tasks.
+
+// Setup transformer with in-memory storage for testing
+Given('a workflow including 4 tasks', async function () {});
+When('I execute 2 tasks successfully and third one fails', async function () {
+  const wrapped = await transformer.makeIdempotent(idempotentWorkflowKey, {
+    ...workflowTasks,
+  });
+  let error: unknown;
+  try {
+    const result1 = await wrapped.task1(input);
+    const result2 = await wrapped.task2(result1);
+    await wrapped.task3(result2);
+    await wrapped.complete();
+  } catch (err) {
+    error = err;
+  }
+  expect(error).to.be.instanceOf(Error);
 });
 
-When(
-  'I wrap the task with the idempotent execution wrapper and I execute the wrapped task with parameter "A" successfully',
-  async () => {
-    const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
-      task: asyncTask,
-    });
-    await wrapped.task({
-      input,
-    });
-  }
-);
+Then('I retry execution of the all tasks', async function () {
+  ++retryCount;
+  const wrapped = await transformer.makeIdempotent(idempotentWorkflowKey, {
+    ...workflowTasks,
+  });
+  await wrapped.task1(input);
+  await wrapped.task2(input);
+  await wrapped.task3(input);
+  await wrapped.task4(input);
+  await wrapped.complete();
+});
 
 Then(
-  'the task fails with Conflict exception when I execute the wrapped task with parameter "B"',
-  async () => {
-    const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
-      task: asyncTask,
-    });
-    let error: unknown;
-    try {
-      await wrapped.task({
-        input: faker.string.uuid(),
-      });
-    } catch (err) {
-      error = err;
-    }
-    expect(error).to.be.instanceOf(IdempotencyConflictException);
+  'the task should execute successfully and all tasks should have been executed only once',
+  async function () {
+    expect(workflowExecution[0]).to.equal(1);
+    expect(workflowExecution[1]).to.equal(1);
+    expect(workflowExecution[2]).to.equal(1);
+    expect(workflowExecution[3]).to.equal(1);
   }
 );
 

@@ -1,6 +1,6 @@
 import { IdempotentLogger } from '../base';
 
-export class ConsoleLogger extends IdempotentLogger {
+export class ConsoleLogger implements IdempotentLogger {
   error(message: string): void {
     console.error(message);
   }

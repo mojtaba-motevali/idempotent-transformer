@@ -1,1 +1,0 @@
-export { ZstdCompressor } from './src';

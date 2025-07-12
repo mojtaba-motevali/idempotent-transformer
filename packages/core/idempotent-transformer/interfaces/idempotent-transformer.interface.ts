@@ -1,5 +1,5 @@
 import {
-  IdempotentCrypto,
+  IdempotentCheckSumGenerator,
   IdempotentLogger,
   IdempotentSerializer,
   IdempotentStateStore,
@@ -26,5 +26,5 @@ export interface IdempotentTransformerInput {
    * The crypto to use for the idempotent transformer
    * @default md5
    */
-  crypto: IdempotentCrypto;
+  checksumGenerator: IdempotentCheckSumGenerator;
 }

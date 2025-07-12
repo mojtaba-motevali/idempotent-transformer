@@ -9,11 +9,6 @@ The library shall wrap any asynchronous task and guarantee that the original tas
         When I execute the wrapped task again
         Then the task should not be executed again and the cached result should be returned
 
-    Scenario: Task execution with different parameters
-        Given an asynchronous task that accepts parameters
-        When I wrap the task with the idempotent execution wrapper and I execute the wrapped task with parameter "A" successfully
-        Then the task fails with Conflict exception when I execute the wrapped task with parameter "B"
-
     Scenario: Workflow Idempotency
         Given a workflow including 4 tasks
         When I execute 2 tasks successfully and third one fails
