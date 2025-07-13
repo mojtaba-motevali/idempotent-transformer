@@ -1,17 +1,21 @@
 {
-  "name": "@idempotent-transformer/adapter-crypto",
-  "version": "0.1.9",
+  "name": "@idempotent-transformer/message-pack-adapter",
+  "version": "0.1.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "scripts": {
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "0.1.10"
+    "@idempotent-transformer/core": "0.1.22",
+    "msgpackr": "^1.11.4"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.15.20"
   },
   "publishConfig": {

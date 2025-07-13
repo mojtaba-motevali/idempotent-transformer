@@ -7,12 +7,11 @@ import {
 } from '@idempotent-transformer/core';
 import { ModelIsNotDecoratedException } from './errors';
 
-export class MessagePack extends IdempotentSerializer {
+export class MessagePack implements IdempotentSerializer {
   private static instance: MessagePack;
   private extPackr: Packr;
 
   private constructor() {
-    super();
     this.extPackr = new Packr({
       encodeUndefinedAsNil: false,
       mapAsEmptyObject: false,

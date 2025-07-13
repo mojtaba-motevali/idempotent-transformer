@@ -11,12 +11,10 @@
     "test": "cucumber-js -c cucumber.json"
   },
   "dependencies": {
-    "@idempotent-transformer/adapter-crypto": "0.1.9",
-    "@idempotent-transformer/adapter-message-pack": "0.1.10",
-    "@idempotent-transformer/adapter-redis": "0.1.14",
-    "@idempotent-transformer/adapter-zstd": "0.1.8",
-    "@idempotent-transformer/bdd": "link:",
-    "@idempotent-transformer/core": "0.1.10"
+    "@idempotent-transformer/checksum-adapter": "0.1.1",
+    "@idempotent-transformer/postgres-adapter": "0.1.4",
+    "@idempotent-transformer/core": "0.1.24",
+    "@idempotent-transformer/message-pack-adapter": "0.1.2"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

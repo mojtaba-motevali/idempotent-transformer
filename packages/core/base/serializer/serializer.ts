@@ -6,12 +6,23 @@ export type TDecoratedModel = {
   deserializeMethodName: string;
 };
 
-export abstract class IdempotentSerializer {
+export interface IdempotentSerializer {
   /**
-   * A map of decorated models.
+   * Serialize a data to a buffer.
+   * @param data - The data to serialize.
+   * @returns A buffer.
    */
-  static decoratedModels = new Map<string, TDecoratedModel>();
-  abstract serialize<T>(data: T): Promise<TSerialized>;
-  abstract deserialize<T>(data: TSerialized): Promise<T>;
-  abstract configure(models: Map<string, TDecoratedModel>): void;
+  serialize<T>(data: T): Promise<TSerialized>;
+  /**
+   * Deserialize a buffer to a data.
+   * @param data - The buffer to deserialize.
+   * @returns The deserialized data.
+   */
+  deserialize<T>(data: TSerialized): Promise<T>;
+
+  /**
+   * Configure the serializer with a map of decorated models.
+   * @param decoratedModels - A map of decorated models.
+   */
+  configure(decoratedModels: Map<string, TDecoratedModel>): void;
 }

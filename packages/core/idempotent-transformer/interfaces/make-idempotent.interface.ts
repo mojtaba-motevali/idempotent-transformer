@@ -8,6 +8,8 @@ export type MakeIdempotentResult<T extends Record<string, (input: any) => Promis
   [K in keyof T]: (
     ...args: [...Parameters<T[K]>, IIdempotentTaskOptions?]
   ) => Promise<ReturnType<T[K]>>;
+} & {
+  complete: () => Promise<void>;
 };
 
 export interface IdempotentTransformerOptions {
@@ -15,5 +17,12 @@ export interface IdempotentTransformerOptions {
    * The number of milliseconds when the task result will be considered expired.
    * @default null
    */
-  ttl?: number | null;
+  retentionTime?: number | null;
+
+  /**
+   * Whether to prefetch checkpoints. Use this when number of tasks and their result are known to you.
+   * There is a trade off between memory usage and performance.
+   * @default false
+   */
+  prefetchCheckpoints?: boolean;
 }

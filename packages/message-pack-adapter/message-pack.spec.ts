@@ -1,4 +1,4 @@
-import { IdempotentSerializer, Serialize } from '@idempotent-transformer/core';
+import { Serialize, decoratedModels } from '@idempotent-transformer/core';
 import { MessagePack } from './message-pack';
 
 @Serialize({
@@ -56,7 +56,7 @@ describe('MessagePack', () => {
   let messagePack: MessagePack;
   beforeAll(() => {
     messagePack = MessagePack.getInstance();
-    messagePack.configure(IdempotentSerializer.decoratedModels);
+    messagePack.configure(decoratedModels);
   });
 
   it('should serialize and deserialize data', async () => {

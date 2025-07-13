@@ -1,16 +1,17 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import {
+  decoratedModels,
   IdempotentTransformer,
   IIdempotentTaskOptions,
+  MakeIdempotentResult,
   Serialize,
 } from '@idempotent-transformer/core';
-import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
-import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
-import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
+import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
+import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
 
 @Serialize({
   name: 'UserDefinedClass',
@@ -67,25 +68,22 @@ class UserDefinedClass {
   }
 }
 
-let asyncTask: () => Promise<UserDefinedClass>;
+let asyncTask: MakeIdempotentResult<{ task: () => UserDefinedClass }>;
 let firstResult: UserDefinedClass;
 let secondResult: UserDefinedClass;
-let storage: RedisAdapter;
+let storage: PostgresAdapter;
+let transformer: IdempotentTransformer;
 const workflowId = faker.string.uuid();
 
 BeforeAll(async () => {
-  storage = new RedisAdapter({
-    options: {
-      host: 'localhost',
-      port: 6379,
-    },
-  });
-  await IdempotentFactory.build({
+  storage = new PostgresAdapter('postgres://postgres:postgres@localhost:5432/postgres');
+  const messagePack = MessagePack.getInstance();
+  messagePack.configure(decoratedModels);
+  transformer = await IdempotentFactory.getInstance().build({
     storage,
-    serializer: MessagePack.getInstance(),
-    compressor: new ZstdCompressor(),
+    serializer: messagePack,
     logger: null,
-    crypto: new Md5Adapter(),
+    checksumGenerator: new CheckSumGenerator(),
   });
 });
 
@@ -100,7 +98,7 @@ Given(
   'a user-defined class with private attributes and a task that returns an instance of this class',
   async function () {
     // Defined in the beforeAll block
-    const wrapped = await IdempotentTransformer.getInstance().makeIdempotent(workflowId, {
+    const wrapped = await transformer.makeIdempotent(workflowId, {
       task: () => {
         return new UserDefinedClass(
           faker.string.uuid(),
@@ -111,13 +109,14 @@ Given(
         );
       },
     });
-    asyncTask = wrapped.task;
+    asyncTask = wrapped;
   }
 );
 
 When('the task is executed twice to showcase a retry operation', async function () {
-  firstResult = await asyncTask();
-  secondResult = await asyncTask();
+  firstResult = await asyncTask.task();
+  secondResult = await asyncTask.task();
+  await asyncTask.complete();
 });
 
 Then(

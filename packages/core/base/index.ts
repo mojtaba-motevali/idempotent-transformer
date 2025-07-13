@@ -1,5 +1,4 @@
-export { IdempotentCompressor } from './compressor';
-export { IdempotentCrypto } from './crypto';
+export { IdempotentCheckSumGenerator } from './checksum-generator';
 export { IdempotentLogger } from './logger';
 export {
   IdempotentSerializer,
@@ -7,6 +6,7 @@ export {
   SERIALIZE_NAME_METADATA_KEY,
   SerializationContractViolatedException,
   TDecoratedModel,
+  decoratedModels,
 } from './serializer';
 export { TSerialized } from './types/serialized.type';
-export { IdempotentStateStore, IStateStoreOptions } from './state-store';
+export { IdempotentStateStore, IIdempotentStateStoreOptions } from './state-store';
