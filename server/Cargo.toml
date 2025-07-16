@@ -1,0 +1,29 @@
+[package]
+name = "idempotency-server"
+version = "0.1.0"
+edition = "2024"
+
+
+
+[dependencies]
+hiqlite-macros="0.9.0"
+hiqlite= { version = "0.9.1", features = ["auto-heal", "backup",  "shutdown-handle", "sqlite" ]}
+serde = "1.0.219"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1.46.1", features = ["full", "signal"] }
+prost = "0.11"
+tonic = "0.9"
+tracing-subscriber = "0.3.19"
+tracing = "0.1.41"
+dotenvy = "0.15.7"
+
+[build-dependencies]
+tonic-build = "0.9"
+
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
