@@ -55,7 +55,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
           return;
         }
         resolve({
-          checkpoints: response.getCheckpointsMap(),
+          checkpoints: Object.fromEntries(response.getCheckpointsMap().entries()),
           fencing_token: response.getFencingToken(),
           total_context_bound_checkpoints: response.getTotalContextBoundCheckpoints(),
         });
@@ -97,7 +97,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
           return;
         }
         resolve({
-          value: Buffer.from(response.getValue()),
+          value: response.getValue() as Buffer,
         });
       });
     });

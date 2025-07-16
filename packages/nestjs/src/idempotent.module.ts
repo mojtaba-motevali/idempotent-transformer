@@ -1,7 +1,5 @@
 import { DynamicModule, Module, Provider } from '@nestjs/common';
 import { IdempotentFactory, IdempotentFactoryOptions } from '@idempotent-transformer/core';
-import { IDEMPOTENT_STORAGE_SERVICE } from './idempotent.constant';
-import { IdempotentController } from './idempotent.controller';
 
 export const IDEMPOTENT_MODULE_OPTIONS = 'IDEMPOTENT_MODULE_OPTIONS';
 
@@ -37,17 +35,8 @@ export class IdempotentModule {
     return {
       module: IdempotentModule,
       imports: opts.imports || [],
-      providers: [
-        optionsProvider,
-        transformerProvider,
-        {
-          provide: IDEMPOTENT_STORAGE_SERVICE,
-          useFactory: ({ storage }: IdempotentFactoryOptions) => storage,
-          inject: [IDEMPOTENT_MODULE_OPTIONS],
-        },
-      ],
+      providers: [optionsProvider, transformerProvider],
       exports: [transformerProvider],
-      controllers: [IdempotentController],
     };
   }
 }

@@ -14,7 +14,7 @@ pub async fn lease_checkpoint(
 ) -> Result<LeasedCheckpointValue, Box<dyn Error>> {
     let mut leased_checkpoint = client
         .execute_returning_one(
-            "INSERT INTO CheckpointLeases (workflow_id, position_checksum, lease_timeout) VALUES ($1, $2, $3) ON CONFLICT (workflow_id, position_checksum) DO UPDATE SET created_at = $4 RETURNING lease_timeout, created_at",
+            "INSERT INTO CheckpointLeases (workflow_id, position_checksum, lease_timeout, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT (workflow_id, position_checksum) DO UPDATE SET created_at = $4 RETURNING lease_timeout, created_at",
             params![workflow_id, position_checksum, lease_timeout, Utc::now().timestamp_millis()],
         )
         .await?;

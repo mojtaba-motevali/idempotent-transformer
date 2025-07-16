@@ -1,10 +1,11 @@
 {
   "name": "@idempotent-transformer/grpc-adapter",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "gen"
   ],
   "license": "MIT",
   "scripts": {

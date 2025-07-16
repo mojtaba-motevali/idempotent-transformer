@@ -1,26 +1,29 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { IdempotentTransformer, IIdempotentTaskOptions } from '@idempotent-transformer/core';
-import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
-import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
+import { IdempotentRunnerResult, IdempotentTransformer } from '@idempotent-transformer/core';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
 import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 
-let wrappedTask: (input: any, options?: IIdempotentTaskOptions) => Promise<any>;
 let asyncTask: (input: any) => Promise<any>;
 let firstResult: any;
 let secondResult: any;
 let input = faker.string.uuid();
-let storage: PostgresAdapter;
+let rpcAdapter: GrpcAdapter;
 const workflowId = faker.string.uuid();
 let taskExecutionCount = 0;
 let currentDate = new Date();
 let transformer: IdempotentTransformer;
+let runner: IdempotentRunnerResult;
 BeforeAll(async () => {
-  storage = new PostgresAdapter('postgres://postgres:postgres@localhost:5432/postgres');
+  rpcAdapter = new GrpcAdapter({
+    host: 'localhost',
+    port: 51000,
+  });
   transformer = await IdempotentFactory.getInstance().build({
-    storage,
+    rpcAdapter,
     serializer: MessagePack.getInstance(),
     logger: null,
     checksumGenerator: new CheckSumGenerator(),
@@ -46,16 +49,20 @@ Given('an asynchronous task that returns a value', async function () {
   };
 });
 When('I wrap the task with the idempotent execution wrapper', async function () {
-  const wrapped = await transformer.makeIdempotent(workflowId, {
-    task: asyncTask,
+  runner = await transformer.startWorkflow(workflowId, {
+    contextName: 'test',
+    isNested: false,
   });
-  wrappedTask = wrapped.task;
 });
 
 When('I execute the wrapped task', async function () {
-  firstResult = await wrappedTask({
-    input,
-  });
+  firstResult = await runner.execute(
+    'Do test',
+    async () =>
+      await asyncTask({
+        input,
+      })
+  );
 });
 
 Then('the task should execute successfully and the result should be returned', async function () {
@@ -68,9 +75,17 @@ Then('the task should execute successfully and the result should be returned', a
 });
 
 When('I execute the wrapped task again', async function () {
-  secondResult = await wrappedTask({
-    input,
+  runner = await transformer.startWorkflow(workflowId, {
+    contextName: 'test',
+    isNested: false,
   });
+  secondResult = await runner.execute(
+    'Do test',
+    async () =>
+      await asyncTask({
+        input,
+      })
+  );
 });
 
 Then(
@@ -86,6 +101,4 @@ Then(
   }
 );
 
-AfterAll(async () => {
-  await storage.disconnect();
-});
+AfterAll(async () => {});

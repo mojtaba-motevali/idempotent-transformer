@@ -1,21 +1,23 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { IdempotentTransformer } from '@idempotent-transformer/core';
-import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
+import { IdempotentRunnerResult, IdempotentTransformer } from '@idempotent-transformer/core';
 import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
 import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 
 let retryCount = 0;
 let workflowExecution = [0, 0, 0, 0, 0, 0, 0];
 
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
-const storage: PostgresAdapter = new PostgresAdapter(
-  'postgres://postgres:postgres@localhost:5432/postgres'
-);
+const rpcAdapter: GrpcAdapter = new GrpcAdapter({
+  host: 'localhost',
+  port: 51000,
+});
 let transformer: IdempotentTransformer;
+let runner: IdempotentRunnerResult;
 let innerWorkflowTasks: {
   task5: () => Promise<any>;
   task6: () => Promise<any>;
@@ -30,7 +32,7 @@ let outerWorkflowTasks: {
 
 BeforeAll(async () => {
   transformer = await IdempotentFactory.getInstance().build({
-    storage,
+    rpcAdapter,
     serializer: MessagePack.getInstance(),
     checksumGenerator: new CheckSumGenerator(),
     logger: null,
@@ -61,21 +63,15 @@ Given(
         return input;
       },
       task2: async () => {
-        const { task5, task6, task7, complete } = await transformer.makeIdempotent(
-          idempotentWorkflowKey,
-          {
-            task5: innerWorkflowTasks.task5,
-            task6: innerWorkflowTasks.task6,
-            task7: innerWorkflowTasks.task7,
-          }
-        );
-        const result = await task5({
-          shouldCompress: true,
+        const innerRunner = await transformer.startWorkflow(idempotentWorkflowKey, {
+          contextName: 'inner workflow with 3 tasks',
+          isNested: true,
         });
-        const result2 = await task6(result);
-        const result3 = await task7(result2);
+        const result = await innerRunner.execute('task5', async () => innerWorkflowTasks.task5());
+        const result2 = await innerRunner.execute('task6', async () => innerWorkflowTasks.task6());
+        const result3 = await innerRunner.execute('task7', async () => innerWorkflowTasks.task7());
         ++workflowExecution[1];
-        await complete();
+        await innerRunner.complete();
         return result + result2 + result3;
       },
       task3: async () => {
@@ -90,18 +86,17 @@ Given(
   }
 );
 When('I execute second task of the inner workflow and fails', async function () {
-  const wrapped = await transformer.makeIdempotent(idempotentWorkflowKey, {
-    task1: outerWorkflowTasks.task1,
-    task3: outerWorkflowTasks.task3,
-    task4: outerWorkflowTasks.task4,
-  });
   let error: unknown;
   try {
-    const result1 = await wrapped.task1();
+    runner = await transformer.startWorkflow(idempotentWorkflowKey, {
+      contextName: 'a workflow with 4 tasks',
+      isNested: false,
+    });
+    const result1 = await runner.execute('task1', async () => outerWorkflowTasks.task1());
     const result2 = await outerWorkflowTasks.task2();
-    await wrapped.task3(result2);
-    await wrapped.task4(result2);
-    await wrapped.complete();
+    await runner.execute('task3', async () => outerWorkflowTasks.task3());
+    await runner.execute('task4', async () => outerWorkflowTasks.task4());
+    await runner.complete();
   } catch (err) {
     error = err;
   }
@@ -109,17 +104,20 @@ When('I execute second task of the inner workflow and fails', async function () 
 });
 
 Then('I retry the outer workflow to recover from the failure', async function () {
-  ++retryCount;
-  const wrapped = await transformer.makeIdempotent(idempotentWorkflowKey, {
-    task1: outerWorkflowTasks.task1,
-    task3: outerWorkflowTasks.task3,
-    task4: outerWorkflowTasks.task4,
+  runner = await transformer.startWorkflow(idempotentWorkflowKey, {
+    contextName: 'a workflow with 4 tasks',
+    isNested: false,
   });
-  await wrapped.task1();
+  ++retryCount;
+  const runnerRetry = await transformer.startWorkflow(idempotentWorkflowKey, {
+    contextName: 'a workflow with 4 tasks',
+    isNested: false,
+  });
+  await runnerRetry.execute('task1', async () => outerWorkflowTasks.task1());
   const result2 = await outerWorkflowTasks.task2();
-  await wrapped.task3(result2);
-  await wrapped.task4(result2);
-  await wrapped.complete();
+  await runnerRetry.execute('task3', async () => outerWorkflowTasks.task3());
+  await runnerRetry.execute('task4', async () => outerWorkflowTasks.task4());
+  await runnerRetry.complete();
 });
 
 Then(
@@ -135,6 +133,4 @@ Then(
   }
 );
 
-AfterAll(async () => {
-  await storage.disconnect();
-});
+AfterAll(async () => {});

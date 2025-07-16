@@ -2,16 +2,15 @@ import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import {
   decoratedModels,
+  IdempotentRunnerResult,
   IdempotentTransformer,
-  IIdempotentTaskOptions,
-  MakeIdempotentResult,
   Serialize,
 } from '@idempotent-transformer/core';
-import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
 import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
 import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 
 @Serialize({
   name: 'UserDefinedClass',
@@ -68,25 +67,35 @@ class UserDefinedClass {
   }
 }
 
-let asyncTask: MakeIdempotentResult<{ task: () => UserDefinedClass }>;
+let runner: IdempotentRunnerResult;
 let firstResult: UserDefinedClass;
 let secondResult: UserDefinedClass;
-let storage: PostgresAdapter;
 let transformer: IdempotentTransformer;
 const workflowId = faker.string.uuid();
 
 BeforeAll(async () => {
-  storage = new PostgresAdapter('postgres://postgres:postgres@localhost:5432/postgres');
   const messagePack = MessagePack.getInstance();
   messagePack.configure(decoratedModels);
   transformer = await IdempotentFactory.getInstance().build({
-    storage,
+    rpcAdapter: new GrpcAdapter({
+      host: 'localhost',
+      port: 51000,
+    }),
     serializer: messagePack,
     logger: null,
     checksumGenerator: new CheckSumGenerator(),
   });
 });
 
+const userDefinedClassTask = async () => {
+  return new UserDefinedClass(
+    faker.string.uuid(),
+    faker.number.int(),
+    new Map().set('a', 'b'),
+    new Set([1, 2, 3]),
+    new Date()
+  );
+};
 // Scenario: Serialize a user-defined class as a task result
 // Given a user-defined class with private attributes
 // And a task that returns an instance of this class
@@ -98,25 +107,21 @@ Given(
   'a user-defined class with private attributes and a task that returns an instance of this class',
   async function () {
     // Defined in the beforeAll block
-    const wrapped = await transformer.makeIdempotent(workflowId, {
-      task: () => {
-        return new UserDefinedClass(
-          faker.string.uuid(),
-          faker.number.int(),
-          new Map().set('a', 'b'),
-          new Set([1, 2, 3]),
-          new Date()
-        );
-      },
+    runner = await transformer.startWorkflow(workflowId, {
+      contextName: 'user-defined-class',
+      isNested: false,
     });
-    asyncTask = wrapped;
   }
 );
 
 When('the task is executed twice to showcase a retry operation', async function () {
-  firstResult = await asyncTask.task();
-  secondResult = await asyncTask.task();
-  await asyncTask.complete();
+  firstResult = await runner.execute('user-defined-class', userDefinedClassTask);
+  runner = await transformer.startWorkflow(workflowId, {
+    contextName: 'user-defined-class',
+    isNested: false,
+  });
+  secondResult = await runner.execute('user-defined-class', userDefinedClassTask);
+  await runner.complete();
 });
 
 Then(
@@ -131,6 +136,4 @@ Then(
   }
 );
 
-AfterAll(async () => {
-  await storage.disconnect();
-});
+AfterAll(async () => {});

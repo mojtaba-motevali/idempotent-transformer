@@ -22,19 +22,6 @@ export class IdempotentTransformer {
     this.rpcAdapter = rpcAdapter;
   }
 
-  /**
-   * Makes a set of functions idempotent.
-   * @param workflowId - The workflow id.
-   * @param functions - The functions to make idempotent. For class methods, use the class method inside an arrow function.
-   * @param options - The options for the transformer.
-   * @returns The result of the transformation function.
-   * @example
-   * ```ts
-   * const result = transformer.startWorkflow('my-workflow-id', {
-   *  exampleMethod: (...args: Parameters<typeof ExampleClass.exampleMethod>) => this.exampleMethod(...args)
-   * });
-   * ``
-   */
   async startWorkflow(
     workflowId: string,
     {
@@ -71,21 +58,24 @@ export class IdempotentTransformer {
         taskOptions?: IIdempotentTaskOptions
       ) => {
         this.logger?.debug(`Executing function ${idempotencyKey}`);
-        const checkpoint_checksum = await this.checksumGenerator.generate(
-          `${workflowId}-${workflowContextName}-${idempotencyKey}-${counter}`
-        );
+        const plain_checksum = `${workflowId}-${workflowContextName}-${idempotencyKey}-${counter}`;
+        this.logger?.debug(`checkpoint_checksum plain: ${plain_checksum}`);
+        const checkpoint_checksum = await this.checksumGenerator.generate(plain_checksum);
+        this.logger?.debug(`checkpoint_checksum plain: ${checkpoint_checksum}`);
+
         const totalCheckpoints = Object.keys(checkpoints).length;
         this.logger?.debug(
           `Prefetched ${totalCheckpoints} checkpoints for ${workflowId} with context ${workflowContextName} and idempotency key ${idempotencyKey}`
         );
         // if prefetchCheckpoints is true, then we need to check if the checkpoint is already in the cache
         if (totalCheckpoints > 0) {
-          const checkpointValue = checkpoints[checkpoint_checksum];
+          const checkpointValue = checkpoints[checkpoint_checksum.toString()];
           this.logger?.debug(
             `Found checkpoint ${checkpoint_checksum} for ${workflowId} with context ${workflowContextName} and idempotency key ${idempotencyKey}`
           );
           if (checkpointValue) {
             const deserializedValue = await this.serializer.deserialize(checkpointValue);
+            counter++;
             return deserializedValue;
           } else {
             throw new Error('Undeterministic checkpoint found');
@@ -110,6 +100,7 @@ export class IdempotentTransformer {
               });
               if (checkpoint.value) {
                 const deserializedValue = await this.serializer.deserialize(checkpoint.value);
+                counter++;
                 return deserializedValue;
               }
               break;
@@ -129,9 +120,9 @@ export class IdempotentTransformer {
         this.logger?.debug(
           `Executing function ${idempotencyKey} with task options ${JSON.stringify(taskOptions)}`
         );
-        const result = await fn();
+        const functionExecutionResult = await fn();
 
-        const serializedResult = await this.serializer.serialize(result);
+        const serializedResult = await this.serializer.serialize(functionExecutionResult);
         this.logger?.debug(
           `Serialized result for ${workflowId} with context ${workflowContextName} and idempotency key ${idempotencyKey} is ${serializedResult}`
         );
@@ -139,7 +130,7 @@ export class IdempotentTransformer {
         let i = 0;
         while (i < 3) {
           try {
-            const result = await this.rpcAdapter.checkpoint({
+            const checkpointResult = await this.rpcAdapter.checkpoint({
               workflow_id: workflowId,
               fencing_token,
               position_checksum: checkpoint_checksum,
@@ -147,7 +138,7 @@ export class IdempotentTransformer {
               workflow_context_name: workflowContextName,
               checkpoint_context_name: idempotencyKey,
             });
-            abort = result.abort;
+            abort = checkpointResult.abort;
             break;
           } catch (err) {
             this.logger?.debug(
@@ -163,7 +154,7 @@ export class IdempotentTransformer {
         }
 
         counter++;
-        return result;
+        return functionExecutionResult;
       },
     } as IdempotentRunnerResult;
 

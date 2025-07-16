@@ -36,5 +36,5 @@ export interface IdempotentTransformerOptions {
    * The workflow id to use for the workflow.
    * @default false
    */
-  isNested: boolean;
+  isNested?: boolean;
 }

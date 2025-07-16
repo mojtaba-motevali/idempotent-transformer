@@ -4,7 +4,7 @@ import { crc32 } from 'node:zlib';
 export class CheckSumGenerator implements IdempotentCheckSumGenerator {
   constructor() {}
 
-  async generate<T extends TSerialized>(value: T): Promise<string | number> {
+  async generate<T extends TSerialized>(value: T): Promise<number> {
     return crc32(value);
   }
 }

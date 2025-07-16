@@ -1,6 +1,5 @@
-gen/
 proto/
-
+gen/
 node_modules/
 
 

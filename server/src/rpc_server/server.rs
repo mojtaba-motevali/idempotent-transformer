@@ -7,7 +7,8 @@ pub mod workflow_service {
     tonic::include_proto!("workflow_service");
 }
 
-use crate::schema::workflow::WorkflowStatus;
+use crate::schema::checkpoint::CheckpointValue;
+use crate::schema::workflow::{Workflow, WorkflowStatus};
 use crate::services::checkpoints::{
     count_checkpoints, create_checkpoint, get_checkpoint, get_checkpoints,
 };
@@ -161,44 +162,38 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<LeaseWorkflowRequest>,
     ) -> Result<Response<LeaseWorkflowResponse>, Status> {
         let data = request.into_inner();
-        let mut checkpoint_fut = None;
-        let mut fencing_token_fut = None;
-        let mut checkpoints = vec![];
-        let mut found_fencing_token = None;
-        let workflow_fut = get_workflow(&self.client, &data.workflow_id);
+        println!("data: {:?}", data);
+        let (workflow, checkpoints, found_fencing_token) = tokio::join!(
+            get_workflow(&self.client, &data.workflow_id),
+            async {
+                if data.prefetch_checkpoints {
+                    get_checkpoints(&self.client, &data.workflow_id).await
+                } else {
+                    Ok(vec![])
+                }
+            },
+            async {
+                if data.is_nested {
+                    get_workflow_fencing_token(&self.client, &data.workflow_id).await
+                } else {
+                    Ok(None)
+                }
+            }
+        );
+
+        let workflow = to_status(workflow)?;
+        let checkpoints = to_status(checkpoints)?;
+        let found_fencing_token = to_status(found_fencing_token)?;
         let mut total_workflow_context_based_checkpoints: i64 = 0;
 
-        // prefetch checkpoints if requested
+        // Handle checkpoints
         if data.prefetch_checkpoints {
-            checkpoint_fut = Some(get_checkpoints(&self.client, &data.workflow_id));
-        }
-
-        // prefetch fencing token if workflow is nested
-        if data.is_nested {
-            fencing_token_fut = Some(get_workflow_fencing_token(&self.client, &data.workflow_id));
-        }
-
-        // get checkpoints if requested
-        if let Some(fut) = checkpoint_fut {
-            checkpoints = to_status(fut.await)?;
             total_workflow_context_based_checkpoints = checkpoints.len() as i64;
         } else {
             total_workflow_context_based_checkpoints = to_status(
                 count_checkpoints(&self.client, &data.workflow_id, &data.context_name).await,
             )?;
         }
-
-        let workflow = to_status(workflow_fut.await)?;
-        if let Some(fut) = fencing_token_fut {
-            found_fencing_token = to_status(fut.await)?;
-        };
-
-        return_error_if_true(
-            found_fencing_token.is_none(),
-            Status::aborted("nested_workflow_fencing_token_conflict"),
-        )?;
-
-        let fencing_token = found_fencing_token.unwrap();
 
         let mut queries = vec![];
 
@@ -211,15 +206,28 @@ impl WorkflowServiceImpl for WorkflowService {
                 "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token) VALUES (?, ?) ON CONFLICT (workflow_id) DO UPDATE SET fencing_token = fencing_token + 1 RETURNING fencing_token",
                 params![&data.workflow_id, 1 as i64],
             ));
+        } else {
+            // Handle fencing token for nested workflows
+            return_error_if_true(
+                found_fencing_token.is_none(),
+                Status::aborted("nested_workflow_fencing_token_conflict"),
+            )?;
         }
 
         to_status(self.client.txn(queries).await)?;
 
+        let fencing_token = if data.is_nested {
+            found_fencing_token.unwrap_or(0)
+        } else {
+            to_status(get_workflow_fencing_token(&self.client, &data.workflow_id).await)?.unwrap()
+        };
+        let hash_map = checkpoints
+            .into_iter()
+            .map(|value| (value.position_checksum.to_string(), value.value))
+            .collect();
+        println!("hash_map: {:?}", hash_map);
         Ok(Response::new(LeaseWorkflowResponse {
-            checkpoints: checkpoints
-                .into_iter()
-                .map(|value| (value.position_checksum.to_string(), value.value))
-                .collect(),
+            checkpoints: hash_map,
             fencing_token: fencing_token,
             total_context_bound_checkpoints: total_workflow_context_based_checkpoints,
         }))
