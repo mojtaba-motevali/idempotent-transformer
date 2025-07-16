@@ -1,10 +1,14 @@
 use crate::database::server::Server;
 use hiqlite::{Client, Error, Node, NodeConfig, start_node};
 use hiqlite_macros::embed::*;
-use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 use std::time::Duration;
 use tokio::time;
+
+// this way of logging makes our logs easier to see with all the raft logging enabled
+fn log<S: Display>(s: S) {
+    println!("\n\n>>> {s}\n");
+}
 
 #[derive(Embed)]
 #[folder = "migrations"]
@@ -27,20 +31,6 @@ async fn node_config(node_id: u64, nodes: Vec<Server>) -> NodeConfig {
     config.tls_raft = None;
     config.tls_api = None;
     config
-}
-
-/// Matches our test table for this example.
-/// serde derives are needed if you want to use the `query_as()` fn.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct Entity {
-    pub id: String,
-    pub num: i64,
-    pub description: Option<String>,
-}
-
-// this way of logging makes our logs easier to see with all the raft logging enabled
-fn log<S: Display>(s: S) {
-    println!("\n\n>>> {s}\n");
 }
 
 pub async fn get_client(
