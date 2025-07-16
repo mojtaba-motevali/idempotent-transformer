@@ -1,9 +1,5 @@
-import {
-  IdempotentCheckSumGenerator,
-  IdempotentLogger,
-  IdempotentSerializer,
-  IdempotentStateStore,
-} from '../../base';
+import { IdempotentCheckSumGenerator, IdempotentLogger, IdempotentSerializer } from '../../base';
+import { IdempotentRpcAdapter } from '../../base/rpc-adapter';
 
 export interface IdempotentTransformerInput {
   /**
@@ -11,11 +7,7 @@ export interface IdempotentTransformerInput {
    * @default console
    */
   log?: IdempotentLogger;
-  /**
-   * The state store to use for the idempotent transformer
-   * @default Redis
-   */
-  storage: IdempotentStateStore;
+
   /**
    * The serializer to use for the idempotent transformer
    * @default MessagePack
@@ -27,4 +19,9 @@ export interface IdempotentTransformerInput {
    * @default md5
    */
   checksumGenerator: IdempotentCheckSumGenerator;
+
+  /**
+   * The rpc adapter to use for the idempotent transformer
+   */
+  rpcAdapter: IdempotentRpcAdapter;
 }

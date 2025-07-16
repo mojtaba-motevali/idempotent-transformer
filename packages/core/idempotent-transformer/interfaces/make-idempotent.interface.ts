@@ -4,12 +4,13 @@ export interface MakeIdempotentInput<T extends Record<string, (input: any) => an
   functions: T;
 }
 
-export type MakeIdempotentResult<T extends Record<string, (input: any) => Promise<any> | any>> = {
-  [K in keyof T]: (
-    ...args: [...Parameters<T[K]>, IIdempotentTaskOptions?]
-  ) => Promise<ReturnType<T[K]>>;
-} & {
+export type IdempotentRunnerResult = {
   complete: () => Promise<void>;
+  execute: (
+    idempotencyKey: string,
+    fn: (...args: any[]) => Promise<any>,
+    options?: IIdempotentTaskOptions
+  ) => Promise<any>;
 };
 
 export interface IdempotentTransformerOptions {
@@ -25,4 +26,15 @@ export interface IdempotentTransformerOptions {
    * @default false
    */
   prefetchCheckpoints?: boolean;
+
+  /**
+   * The context name to use for the workflow. This is used to differentiate nested workflows.
+   */
+  contextName: string;
+
+  /**
+   * The workflow id to use for the workflow.
+   * @default false
+   */
+  isNested: boolean;
 }

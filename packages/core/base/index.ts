@@ -9,4 +9,4 @@ export {
   decoratedModels,
 } from './serializer';
 export { TSerialized } from './types/serialized.type';
-export { IdempotentStateStore, IIdempotentStateStoreOptions } from './state-store';
+export * from './rpc-adapter';

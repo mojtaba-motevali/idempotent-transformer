@@ -2,13 +2,13 @@ import {
   IdempotentCheckSumGenerator,
   IdempotentLogger,
   IdempotentSerializer,
-  IdempotentStateStore,
+  IdempotentRpcAdapter,
 } from '../base';
 import { IdempotentTransformer } from '../idempotent-transformer';
 import { ConsoleLogger } from '../logger/console-logger';
 
 export interface IdempotentFactoryOptions {
-  storage: IdempotentStateStore;
+  rpcAdapter: IdempotentRpcAdapter;
   logger?: IdempotentLogger | null;
   serializer: IdempotentSerializer;
   checksumGenerator: IdempotentCheckSumGenerator;
@@ -27,16 +27,13 @@ export class IdempotentFactory {
   }
 
   public async build({
-    storage,
+    rpcAdapter,
     logger = new ConsoleLogger(),
     serializer,
     checksumGenerator,
   }: IdempotentFactoryOptions) {
-    if (!(await storage.isConnected())) {
-      await storage.connect();
-    }
     return new IdempotentTransformer({
-      storage,
+      rpcAdapter,
       log: logger ?? undefined,
       serializer,
       checksumGenerator,

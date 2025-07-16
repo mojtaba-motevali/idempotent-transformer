@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use hiqlite::Client;
 use hiqlite_macros::params;
 
@@ -6,22 +6,19 @@ use tonic::{Request, Response, Status, transport::Server};
 pub mod workflow_service {
     tonic::include_proto!("workflow_service");
 }
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::schema::workflow::WorkflowStatus;
 use crate::services::checkpoints::{
     count_checkpoints, create_checkpoint, get_checkpoint, get_checkpoints,
 };
-use crate::services::lease_checkpoint::{get_lease_timeout, lease_checkpoint};
+use crate::services::lease_checkpoint::{get_leased_checkpoint, lease_checkpoint};
 use crate::services::workflows::{get_create_workflow_query, get_workflow};
 use crate::services::workflows_fencing_tokens::get_workflow_fencing_token;
 
 use workflow_service::{
     CheckPointRequest, CheckPointResponse, CompleteWorkflowRequest, CompleteWorkflowResponse,
     LeaseCheckpointRequest, LeaseCheckpointResponse, LeaseWorkflowRequest, LeaseWorkflowResponse,
-    WorkflowCheckpoint,
-    lease_checkpoint_response::Response::{AcquiredLeaseTimeout, LeaseTimeout, Value},
-    workflow_service_impl_server::WorkflowServiceImpl,
+    lease_checkpoint_response::Response::Value, workflow_service_impl_server::WorkflowServiceImpl,
     workflow_service_impl_server::WorkflowServiceImplServer,
 };
 
@@ -47,24 +44,31 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<CheckPointRequest>,
     ) -> Result<Response<CheckPointResponse>, Status> {
         let data = request.into_inner();
-        let (token, lease_timeout) = tokio::join!(
+        let (token, leased_checkpoint_result) = tokio::join!(
             get_workflow_fencing_token(&self.client, &data.workflow_id),
-            get_lease_timeout(&self.client, &data.workflow_id, data.position_checksum)
+            get_leased_checkpoint(&self.client, &data.workflow_id, data.position_checksum)
         );
         let stored_fencing_token = to_status(token)?;
-        let lease_timeout = to_status(lease_timeout)?;
+        let leased_checkpoint = to_status(leased_checkpoint_result)?;
 
         return_error_if_true(
             stored_fencing_token.is_none(),
             Status::aborted("fencing_token_not_found"),
         )?;
 
-        if let Some(unwrapped_lease_timeout) = lease_timeout {
-            if unwrapped_lease_timeout > Utc::now().timestamp_millis() {
+        let mut abort = false;
+
+        // Reject the result if the lease timeout is expired for the worker lease used to belong to.
+        if let Some(unwrapped_lease_timeout) = leased_checkpoint {
+            // if lease timeout is expired, then we need to check if the fencing token is expired
+            if unwrapped_lease_timeout.lease_timeout + unwrapped_lease_timeout.created_at
+                < Utc::now().timestamp_millis()
+            {
                 return_error_if_true(
                     stored_fencing_token.unwrap() > data.fencing_token,
                     Status::aborted("fencing_token_expired"),
                 )?;
+                abort = true;
             }
         }
 
@@ -79,7 +83,7 @@ impl WorkflowServiceImpl for WorkflowService {
             )
             .await,
         )
-        .map(|_| Response::new(CheckPointResponse {}))
+        .map(|_| Response::new(CheckPointResponse { abort: abort }))
     }
 
     async fn lease_checkpoint(
@@ -116,7 +120,7 @@ impl WorkflowServiceImpl for WorkflowService {
         // if fencing token is the same, then we need to lease the checkpoint
         if sent_fencing_token == stored_fencing_token {
             // lease checkpoint
-            let lease_timeout = to_status(
+            to_status(
                 lease_checkpoint(
                     &self.client,
                     &data.workflow_id,
@@ -125,25 +129,28 @@ impl WorkflowServiceImpl for WorkflowService {
                 )
                 .await,
             )?;
-            return Ok(Response::new(LeaseCheckpointResponse {
-                response: Some(AcquiredLeaseTimeout(lease_timeout)),
-            }));
+            return Ok(Response::new(LeaseCheckpointResponse { response: None }));
         }
         // if fencing token is greater, then we need to get the checkpoint
         if sent_fencing_token > stored_fencing_token {
             // get lease timeout
-            let lease_timeout = to_status(
-                get_lease_timeout(&self.client, &data.workflow_id, data.position_checksum).await,
+            let leased_checkpoint = to_status(
+                get_leased_checkpoint(&self.client, &data.workflow_id, data.position_checksum)
+                    .await,
             )?;
 
             return_error_if_true(
-                lease_timeout.is_none(),
+                leased_checkpoint.is_none(),
                 Status::aborted("lease_timeout_not_found"),
             )?;
 
-            return Ok(Response::new(LeaseCheckpointResponse {
-                response: Some(LeaseTimeout(lease_timeout.unwrap())),
-            }));
+            let leased_checkpoint = leased_checkpoint.unwrap();
+
+            return_error_if_true(
+                (leased_checkpoint.lease_timeout + leased_checkpoint.created_at)
+                    < Utc::now().timestamp_millis(),
+                Status::aborted("checkpoint_leased_by_other_workflow"),
+            )?;
         }
         println!("data: {:?}", data);
         Err(Status::internal("unexpected state"))
@@ -211,10 +218,7 @@ impl WorkflowServiceImpl for WorkflowService {
         Ok(Response::new(LeaseWorkflowResponse {
             checkpoints: checkpoints
                 .into_iter()
-                .map(|v| WorkflowCheckpoint {
-                    position_checksum: v.position_checksum,
-                    value: v.value,
-                })
+                .map(|value| (value.position_checksum.to_string(), value.value))
                 .collect(),
             fencing_token: fencing_token,
             total_context_bound_checkpoints: total_workflow_context_based_checkpoints,
@@ -237,10 +241,8 @@ impl WorkflowServiceImpl for WorkflowService {
             .execute(
                 "UPDATE Workflows SET expire_at = $1, status = $2 WHERE id = $3",
                 params![
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("clock went backwards")
-                        .as_secs() as i64,
+                    Utc::now()
+                        .checked_add_signed(chrono::Duration::milliseconds(data.expire_after)),
                     WorkflowStatus::Completed as i64,
                     data.workflow_id
                 ],

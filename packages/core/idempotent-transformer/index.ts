@@ -2,7 +2,6 @@ export { IdempotentTransformer } from './idempotent-transformer';
 export {
   IdempotentTransformerInput,
   IdempotentTransformerOptions,
-  MakeIdempotentResult,
-  IdempotencyResult,
+  IdempotentRunnerResult,
   IIdempotentTaskOptions,
 } from './interfaces';
