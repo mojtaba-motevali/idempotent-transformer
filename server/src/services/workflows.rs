@@ -9,7 +9,7 @@ use crate::schema::workflow::{Workflow, WorkflowStatus};
 pub async fn get_workflow(
     client: &Client,
     workflow_id: &str,
-) -> Result<Option<Workflow>, Box<dyn Error>> {
+) -> Result<Option<Workflow>, Box<dyn Error + Send + Sync>> {
     println!("get_workflow: {:?}", workflow_id);
     let result = client
         .query_as_optional::<Workflow, _>(

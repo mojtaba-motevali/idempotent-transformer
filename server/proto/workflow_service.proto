@@ -14,8 +14,8 @@ service WorkflowServiceImpl {
 }
 
 
-message Checkpoint {
-    int64 position = 1;
+message WorkflowCheckpoint {
+    int64 position_checksum = 1;
     bytes value = 2;
 }
 
@@ -23,11 +23,13 @@ message LeaseWorkflowRequest {
     string workflow_id = 1;
     bool is_nested = 2;
     bool prefetch_checkpoints = 3;
+    string context_name = 4;
 }
 
 message LeaseWorkflowResponse {
-    repeated Checkpoint checkpoints = 1;
+    repeated WorkflowCheckpoint checkpoints = 1;
     int64 fencing_token = 2;
+    int64 total_context_bound_checkpoints = 3;
 }
 
 // argument
@@ -36,7 +38,10 @@ message CheckPointRequest {
     string workflow_id = 1;
     bytes value = 2;
     int64 fencing_token = 3;
-    int64 position = 4;
+    int64 position_checksum = 4;
+    // for readability
+    string workflow_context_name = 5;
+    string checkpoint_context_name = 6;
 }
 
 // return value
@@ -46,8 +51,8 @@ message CheckPointResponse {}
 message LeaseCheckpointRequest {
     string workflow_id = 1;
     int64 fencing_token = 2;
-    int64 position = 3;
-    int64 lease_timeout = 4;
+    int64 lease_timeout = 3;
+    int64 position_checksum = 4;
 }
 
 message LeaseCheckpointResponse {
