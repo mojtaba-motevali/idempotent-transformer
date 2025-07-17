@@ -19,20 +19,6 @@ pub async fn get_checkpoints(
     Ok(checkpoints)
 }
 
-pub async fn count_checkpoints(
-    client: &Client,
-    workflow_id: &str,
-    workflow_context_name: &str,
-) -> Result<i64, Box<dyn Error + Send + Sync>> {
-    let checkpoints = client
-        .query_as_one::<i64, _>(
-            "SELECT COUNT(*) FROM Checkpoints WHERE workflow_id = $1 AND workflow_context_name = $2",
-            params![workflow_id, workflow_context_name],
-        )
-        .await?;
-    Ok(checkpoints)
-}
-
 pub async fn get_checkpoint(
     client: &Client,
     workflow_id: &str,

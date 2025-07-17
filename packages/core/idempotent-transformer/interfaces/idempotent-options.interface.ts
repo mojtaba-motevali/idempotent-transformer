@@ -1,6 +1,7 @@
 export interface IIdempotentTaskOptions {
   /**
-   * Whether the task result should be compressed.
+   * The number of milliseconds when the task result will be considered expired.
+   * @default 30 seconds
    */
-  shouldCompress?: boolean;
+  leaseTimeout?: number;
 }

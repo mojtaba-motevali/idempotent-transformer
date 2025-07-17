@@ -1,0 +1,11 @@
+config:
+  target: "unused"  # required but not used
+  processor: "./parallel-same-workflow.js"
+  # processor: "./parallel-same-workflow-long-running-task.js"
+  phases:
+    - arrivalRate: 50
+      duration: 20
+scenarios:
+  - name: "Run SDK Workflow"
+    flow:
+      - function: "runWorkflow"

@@ -1,0 +1,27 @@
+{
+  "name": "@idempotent-transformer/grpc-adapter",
+  "version": "0.1.8",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "gen"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "generate": "./generate.sh",
+    "build": "tsc",
+    "prepare": "ts-node move-proto.ts && pnpm generate"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@idempotent-transformer/core": "0.1.33"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "grpc-tools": "^1.13.0",
+    "grpc_tools_node_protoc_ts": "^5.3.3"
+  }
+}

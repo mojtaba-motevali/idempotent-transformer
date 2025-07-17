@@ -1,7 +1,7 @@
 {
-  "name": "idempotent-transformer",
+  "name": "SyncShield",
   "version": "0.1.0",
-  "description": "A TypeScript library for idempotent transformations",
+  "description": "A solution for distributed services to ensure idempotency at task level in workflows.",
   "private": true,
   "workspaces": [
     "packages/*"

@@ -1,11 +1,11 @@
 import { Given, When, Then, AfterAll, BeforeAll } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { IdempotentTransformer } from '@idempotent-transformer/core';
+import { IdempotentRunnerResult, IdempotentTransformer } from '@idempotent-transformer/core';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
 import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
-import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
 import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 
 let retryCount = 0;
 let workflowExecution = [0, 0, 0, 0];
@@ -15,7 +15,7 @@ let workflowTasks = {
     return input;
   },
   task2: async (input: any) => {
-    ++workflowExecution[1];
+    workflowExecution[1] += 1;
     return input;
   },
   task3: async (input: any) => {
@@ -32,14 +32,16 @@ let transformer: IdempotentTransformer;
 
 const input = faker.string.uuid();
 const idempotentWorkflowKey = faker.string.uuid();
-const storage: PostgresAdapter = new PostgresAdapter(
-  'postgres://postgres:postgres@localhost:5432/postgres'
-);
+const rpcAdapter: GrpcAdapter = new GrpcAdapter({
+  host: 'localhost',
+  port: 51000,
+});
+let runner: IdempotentRunnerResult;
 BeforeAll(async () => {
   transformer = await IdempotentFactory.getInstance().build({
-    storage,
+    rpcAdapter,
     serializer: MessagePack.getInstance(),
-    logger: null,
+    logger: console,
     checksumGenerator: new CheckSumGenerator(),
   });
 });
@@ -50,17 +52,20 @@ BeforeAll(async () => {
 // Then the library does not execute the first two tasks and successfully executes all tasks.
 
 // Setup transformer with in-memory storage for testing
-Given('a workflow including 4 tasks', async function () {});
-When('I execute 2 tasks successfully and third one fails', async function () {
-  const wrapped = await transformer.makeIdempotent(idempotentWorkflowKey, {
-    ...workflowTasks,
+Given('a workflow including 4 tasks', async function () {
+  runner = await transformer.startWorkflow(idempotentWorkflowKey, {
+    contextName: 'workflow-with-4-tasks',
+    isNested: false,
   });
+});
+When('I execute 2 tasks successfully and third one fails', async function () {
   let error: unknown;
   try {
-    const result1 = await wrapped.task1(input);
-    const result2 = await wrapped.task2(result1);
-    await wrapped.task3(result2);
-    await wrapped.complete();
+    const result1 = await runner.execute('task1', async () => await workflowTasks.task1(input));
+    const result2 = await runner.execute('task2', async () => await workflowTasks.task2(result1));
+    await runner.execute('task3', async () => await workflowTasks.task3(result2));
+    await runner.execute('task4', async () => await workflowTasks.task4(input));
+    await runner.complete();
   } catch (err) {
     error = err;
   }
@@ -69,19 +74,21 @@ When('I execute 2 tasks successfully and third one fails', async function () {
 
 Then('I retry execution of the all tasks', async function () {
   ++retryCount;
-  const wrapped = await transformer.makeIdempotent(idempotentWorkflowKey, {
-    ...workflowTasks,
+  const newRunner = await transformer.startWorkflow(idempotentWorkflowKey, {
+    contextName: 'workflow-with-4-tasks',
+    isNested: false,
   });
-  await wrapped.task1(input);
-  await wrapped.task2(input);
-  await wrapped.task3(input);
-  await wrapped.task4(input);
-  await wrapped.complete();
+  await newRunner.execute('task1', async () => await workflowTasks.task1(input));
+  await newRunner.execute('task2', async () => await workflowTasks.task2(input));
+  await newRunner.execute('task3', async () => await workflowTasks.task3(input));
+  await newRunner.execute('task4', async () => await workflowTasks.task4(input));
+  await newRunner.complete();
 });
 
 Then(
   'the task should execute successfully and all tasks should have been executed only once',
   async function () {
+    console.log('workflowExecution', workflowExecution);
     expect(workflowExecution[0]).to.equal(1);
     expect(workflowExecution[1]).to.equal(1);
     expect(workflowExecution[2]).to.equal(1);
@@ -89,6 +96,4 @@ Then(
   }
 );
 
-AfterAll(async () => {
-  await storage.disconnect();
-});
+AfterAll(async () => {});

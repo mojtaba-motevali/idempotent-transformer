@@ -31,7 +31,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoints_workflow_id_position ON Checkp
 CREATE TABLE IF NOT EXISTS CheckpointLeases (
     workflow_id VARCHAR(255) NOT NULL REFERENCES Workflows (id) ON DELETE CASCADE,
     position_checksum INTEGER NOT NULL,
-    lease_timeout INTEGER NOT NULL
+    lease_timeout INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoint_leases_workflow_id_checkpoint_position ON CheckpointLeases (

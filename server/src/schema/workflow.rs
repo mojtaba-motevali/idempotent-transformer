@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 pub enum WorkflowStatus {
     Running = 0,
     Completed = 1,
-    Failed = 2,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +22,6 @@ impl From<Row<'_>> for Workflow {
             status: match row.get::<i64>("status") {
                 0 => WorkflowStatus::Running,
                 1 => WorkflowStatus::Completed,
-                2 => WorkflowStatus::Failed,
                 _ => panic!("Invalid workflow status"),
             } as i64,
             expire_at: match row.get::<Option<i64>>("expire_at") {
