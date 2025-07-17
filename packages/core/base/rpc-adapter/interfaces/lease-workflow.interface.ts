@@ -8,5 +8,4 @@ export interface LeaseWorkflowInput {
 export interface LeaseWorkflowOutput {
   checkpoints: Record<string, Uint8Array>;
   fencing_token: number;
-  total_context_bound_checkpoints: number;
 }

@@ -1,14 +1,19 @@
-import { credentials, VerifyOptions } from '@grpc/grpc-js';
+import { credentials, ServiceError, VerifyOptions } from '@grpc/grpc-js';
 import {
   CheckpointInput,
+  CheckpointLeasedByOtherWorkerException,
   CheckpointOutput,
   CompleteWorkflowInput,
   CompleteWorkflowOutput,
+  FencingTokenExpiredException,
   IdempotentRpcAdapter,
+  NestedWorkflowFencingTokenConflictException,
   LeaseCheckpointInput,
   LeaseCheckpointOutput,
   LeaseWorkflowInput,
   LeaseWorkflowOutput,
+  LeaseTimeoutNotFoundException,
+  FencingTokenNotFoundException,
 } from '@idempotent-transformer/core';
 import { WorkflowServiceImplClient } from '../gen/workflow_service_grpc_pb';
 import {
@@ -18,6 +23,21 @@ import {
   LeaseWorkflowRequest,
 } from '../gen/workflow_service_pb';
 
+const exceptions = {
+  ['checkpoint_leased_by_other_worker']: CheckpointLeasedByOtherWorkerException,
+  ['fencing_token_expired']: FencingTokenExpiredException,
+  ['nested_workflow_fencing_token_conflict']: NestedWorkflowFencingTokenConflictException,
+  ['lease_timeout_not_found']: LeaseTimeoutNotFoundException,
+  ['fencing_token_not_found']: FencingTokenNotFoundException,
+};
+
+const handleError = (err: ServiceError) => {
+  const Exception = exceptions[err.details as keyof typeof exceptions];
+  if (Exception) {
+    return new Exception(err.details);
+  }
+  return err;
+};
 export class GrpcAdapter implements IdempotentRpcAdapter {
   private client: WorkflowServiceImplClient;
   constructor({
@@ -51,13 +71,12 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     return new Promise((resolve, reject) => {
       this.client.lease_workflow(request, (err, response) => {
         if (err) {
-          reject(err);
+          reject(handleError(err));
           return;
         }
         resolve({
           checkpoints: Object.fromEntries(response.getCheckpointsMap().entries()),
           fencing_token: response.getFencingToken(),
-          total_context_bound_checkpoints: response.getTotalContextBoundCheckpoints(),
         });
       });
     });
@@ -74,7 +93,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     return new Promise((resolve, reject) => {
       this.client.checkpoint(request, (err, response) => {
         if (err) {
-          reject(err);
+          reject(handleError(err));
           return;
         }
         resolve({
@@ -93,7 +112,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     return new Promise((resolve, reject) => {
       this.client.lease_checkpoint(request, (err, response) => {
         if (err) {
-          reject(err);
+          reject(handleError(err));
           return;
         }
         resolve({
@@ -111,7 +130,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     return new Promise((resolve, reject) => {
       this.client.complete_workflow(request, (err, response) => {
         if (err) {
-          reject(err);
+          reject(handleError(err));
           return;
         }
         resolve({});

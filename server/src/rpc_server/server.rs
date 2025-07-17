@@ -1,20 +1,23 @@
-use chrono::{TimeZone, Utc};
-use hiqlite::Client;
+use chrono::Utc;
+use hiqlite::{Client, Lock};
 use hiqlite_macros::params;
 
+use std::time::Duration;
 use tonic::{Request, Response, Status, transport::Server};
 pub mod workflow_service {
     tonic::include_proto!("workflow_service");
 }
 
-use crate::schema::checkpoint::CheckpointValue;
-use crate::schema::workflow::{Workflow, WorkflowStatus};
-use crate::services::checkpoints::{
-    count_checkpoints, create_checkpoint, get_checkpoint, get_checkpoints,
+use crate::schema::leased_checkpoint::LeasedCheckpointValue;
+use crate::schema::workflow::WorkflowStatus;
+use crate::services::checkpoints::{create_checkpoint, get_checkpoint, get_checkpoints};
+use crate::services::lease_checkpoint::{
+    get_leased_checkpoint, lease_checkpoint, release_checkpoint,
 };
-use crate::services::lease_checkpoint::{get_leased_checkpoint, lease_checkpoint};
-use crate::services::workflows::{get_create_workflow_query, get_workflow};
-use crate::services::workflows_fencing_tokens::get_workflow_fencing_token;
+use crate::services::workflows::create_or_get_workflow;
+use crate::services::workflows_fencing_tokens::{
+    get_workflow_fencing_token, increment_workflow_fencing_token,
+};
 
 use workflow_service::{
     CheckPointRequest, CheckPointResponse, CompleteWorkflowRequest, CompleteWorkflowResponse,
@@ -23,13 +26,36 @@ use workflow_service::{
     workflow_service_impl_server::WorkflowServiceImplServer,
 };
 
+fn has_expired(leased_checkpoint: &LeasedCheckpointValue) -> bool {
+    let now = chrono::Utc::now().timestamp_millis();
+    let expires_at = leased_checkpoint
+        .created_at
+        .saturating_add(leased_checkpoint.lease_timeout);
+    now <= expires_at
+}
+
 /// Converts any error to a Status for easier use with the ? operator
-fn to_status<T, E: std::fmt::Display>(result: Result<T, E>) -> Result<T, Status> {
+fn to_status<T, E: std::fmt::Display>(
+    result: Result<T, E>,
+    lock: Option<Lock>,
+) -> Result<T, Status> {
+    if result.is_err() {
+        if let Some(lock) = lock {
+            drop(lock);
+        }
+    }
     result.map_err(|e| Status::internal(e.to_string()))
 }
 
-fn return_error_if_true(condition: bool, status: Status) -> Result<(), Status> {
-    if condition { Err(status) } else { Ok(()) }
+fn return_error_if_true(condition: bool, status: Status, lock: Option<Lock>) -> Result<(), Status> {
+    if condition {
+        if let Some(lock) = lock {
+            drop(lock);
+        }
+        Err(status)
+    } else {
+        Ok(())
+    }
 }
 
 // defining a struct for our service
@@ -45,32 +71,35 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<CheckPointRequest>,
     ) -> Result<Response<CheckPointResponse>, Status> {
         let data = request.into_inner();
+        println!("Checkpoint {:?}", data);
         let (token, leased_checkpoint_result) = tokio::join!(
             get_workflow_fencing_token(&self.client, &data.workflow_id),
-            get_leased_checkpoint(&self.client, &data.workflow_id, data.position_checksum)
+            release_checkpoint(&self.client, &data.workflow_id, data.position_checksum)
         );
-        let stored_fencing_token = to_status(token)?;
-        let leased_checkpoint = to_status(leased_checkpoint_result)?;
+        let stored_fencing_token = to_status(token, None)?;
+        let leased_checkpoint = to_status(leased_checkpoint_result, None)?;
 
         return_error_if_true(
             stored_fencing_token.is_none(),
             Status::aborted("fencing_token_not_found"),
+            None,
         )?;
 
         let mut abort = false;
+        let is_fencing_token_expired = stored_fencing_token.unwrap() > data.fencing_token;
 
         // Reject the result if the lease timeout is expired for the worker lease used to belong to.
-        if let Some(unwrapped_lease_timeout) = leased_checkpoint {
-            // if lease timeout is expired, then we need to check if the fencing token is expired
-            if unwrapped_lease_timeout.lease_timeout + unwrapped_lease_timeout.created_at
-                < Utc::now().timestamp_millis()
-            {
-                return_error_if_true(
-                    stored_fencing_token.unwrap() > data.fencing_token,
-                    Status::aborted("fencing_token_expired"),
-                )?;
-                abort = true;
-            }
+        // if lease timeout is expired, then we need to check if the fencing token is expired
+        if !has_expired(&leased_checkpoint) {
+            return_error_if_true(
+                is_fencing_token_expired,
+                Status::aborted("fencing_token_expired"),
+                None,
+            )?;
+        }
+
+        if is_fencing_token_expired {
+            abort = true;
         }
 
         to_status(
@@ -83,33 +112,30 @@ impl WorkflowServiceImpl for WorkflowService {
                 &data.checkpoint_context_name,
             )
             .await,
-        )
-        .map(|_| Response::new(CheckPointResponse { abort: abort }))
+            None,
+        )?;
+
+        return Ok(Response::new(CheckPointResponse { abort: abort }));
     }
 
     async fn lease_checkpoint(
         &self,
         request: Request<LeaseCheckpointRequest>,
     ) -> Result<Response<LeaseCheckpointResponse>, Status> {
-        let data = request.into_inner();
-        let sent_fencing_token = data.fencing_token;
+        // A lock key can be any String to provide the most flexibility.
+        // It behaves the same as any other lock - it will be released on drop and as long as it
+        // exists, other locks will have to wait.
+        //
+        // In the current implementation, distributed locks have an internal timeout of 10 seconds.
+        // When this time expires, a lock will be considered "dead" because of network issues, just
+        // in case it has not been possible to release the lock properly. This prevents deadlocks
+        // just because some client or server crashed.
 
-        // Lease checkpoint is only allowed if the workflow has a fencing token
-        let found_fencing_token =
-            to_status(get_workflow_fencing_token(&self.client, &data.workflow_id).await)?;
-        return_error_if_true(
-            found_fencing_token.is_none(),
-            Status::aborted("fencing_token_not_found"),
-        )?;
-        // old fencing tokens can not be used to lease a checkpoint
-        let stored_fencing_token = found_fencing_token.unwrap();
-        return_error_if_true(
-            stored_fencing_token > sent_fencing_token,
-            Status::aborted("fencing_token_expired"),
-        )?;
+        let data = request.into_inner();
 
         let result = to_status(
             get_checkpoint(&self.client, &data.workflow_id, data.position_checksum).await,
+            None,
         )?;
 
         // if checkpoint is already leased, then we need to return the value
@@ -118,9 +144,58 @@ impl WorkflowServiceImpl for WorkflowService {
                 response: Some(Value(result.unwrap().value)),
             }));
         }
+
+        let lock_key = data.workflow_id.clone() + "_" + &data.position_checksum.to_string();
+
+        let lock = match self.client.lock(lock_key).await {
+            Ok(lock) => lock,
+            Err(err) => {
+                println!("Lock acquisition failed: {:?}", err);
+                return Err(Status::internal(err.to_string()));
+            }
+        };
+        // At least 40 milliseconds is required for lock being held, otherwise thread panics under high load.
+        tokio::time::sleep(Duration::from_millis(40)).await;
+
+        let sent_fencing_token = data.fencing_token;
+
+        let leased_checkpoint_result = to_status(
+            get_leased_checkpoint(&self.client, &data.workflow_id, data.position_checksum).await,
+            None,
+        )?;
+        if let Some(leased_checkpoint) = leased_checkpoint_result {
+            return_error_if_true(
+                has_expired(&leased_checkpoint),
+                Status::aborted("checkpoint_leased_by_other_worker"),
+                None,
+            )?;
+        }
+        // Lease checkpoint is only allowed if the workflow has a fencing token
+        let found_fencing_token =
+            match get_workflow_fencing_token(&self.client, &data.workflow_id).await {
+                Ok(token) => token,
+                Err(err) => {
+                    drop(lock);
+                    return Err(Status::internal(err.to_string()));
+                }
+            };
+
+        return_error_if_true(
+            found_fencing_token.is_none(),
+            Status::aborted("fencing_token_not_found"),
+            None,
+        )?;
+        // old fencing tokens can not be used to lease a checkpoint
+        let stored_fencing_token = found_fencing_token.unwrap();
+
+        return_error_if_true(
+            stored_fencing_token > sent_fencing_token,
+            Status::aborted("fencing_token_expired"),
+            None,
+        )?;
+
         // if fencing token is the same, then we need to lease the checkpoint
         if sent_fencing_token == stored_fencing_token {
-            // lease checkpoint
             to_status(
                 lease_checkpoint(
                     &self.client,
@@ -129,31 +204,11 @@ impl WorkflowServiceImpl for WorkflowService {
                     data.lease_timeout,
                 )
                 .await,
+                None,
             )?;
             return Ok(Response::new(LeaseCheckpointResponse { response: None }));
         }
-        // if fencing token is greater, then we need to get the checkpoint
-        if sent_fencing_token > stored_fencing_token {
-            // get lease timeout
-            let leased_checkpoint = to_status(
-                get_leased_checkpoint(&self.client, &data.workflow_id, data.position_checksum)
-                    .await,
-            )?;
-
-            return_error_if_true(
-                leased_checkpoint.is_none(),
-                Status::aborted("lease_timeout_not_found"),
-            )?;
-
-            let leased_checkpoint = leased_checkpoint.unwrap();
-
-            return_error_if_true(
-                (leased_checkpoint.lease_timeout + leased_checkpoint.created_at)
-                    < Utc::now().timestamp_millis(),
-                Status::aborted("checkpoint_leased_by_other_workflow"),
-            )?;
-        }
-        println!("data: {:?}", data);
+        drop(lock);
         Err(Status::internal("unexpected state"))
     }
 
@@ -162,9 +217,8 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<LeaseWorkflowRequest>,
     ) -> Result<Response<LeaseWorkflowResponse>, Status> {
         let data = request.into_inner();
-        println!("data: {:?}", data);
-        let (workflow, checkpoints, found_fencing_token) = tokio::join!(
-            get_workflow(&self.client, &data.workflow_id),
+        let (workflow_id_result, checkpoints, found_fencing_token) = tokio::join!(
+            create_or_get_workflow(&self.client, &data.workflow_id, WorkflowStatus::Running),
             async {
                 if data.prefetch_checkpoints {
                     get_checkpoints(&self.client, &data.workflow_id).await
@@ -180,56 +234,35 @@ impl WorkflowServiceImpl for WorkflowService {
                 }
             }
         );
+        to_status(workflow_id_result, None)?;
 
-        let workflow = to_status(workflow)?;
-        let checkpoints = to_status(checkpoints)?;
-        let found_fencing_token = to_status(found_fencing_token)?;
-        let mut total_workflow_context_based_checkpoints: i64 = 0;
+        let checkpoints = to_status(checkpoints, None)?;
+        let found_fencing_token = to_status(found_fencing_token, None)?;
 
-        // Handle checkpoints
-        if data.prefetch_checkpoints {
-            total_workflow_context_based_checkpoints = checkpoints.len() as i64;
-        } else {
-            total_workflow_context_based_checkpoints = to_status(
-                count_checkpoints(&self.client, &data.workflow_id, &data.context_name).await,
-            )?;
-        }
+        let mut fencing_token = found_fencing_token.unwrap_or(-1);
 
-        let mut queries = vec![];
-
-        if workflow.is_none() {
-            queries.push(get_create_workflow_query(&data.workflow_id));
-        }
-
-        if !data.is_nested {
-            queries.push((
-                "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token) VALUES (?, ?) ON CONFLICT (workflow_id) DO UPDATE SET fencing_token = fencing_token + 1 RETURNING fencing_token",
-                params![&data.workflow_id, 1 as i64],
-            ));
-        } else {
-            // Handle fencing token for nested workflows
+        if data.is_nested && fencing_token == -1 {
             return_error_if_true(
                 found_fencing_token.is_none(),
                 Status::aborted("nested_workflow_fencing_token_conflict"),
+                None,
+            )?;
+        }
+        if fencing_token == -1 {
+            fencing_token = to_status(
+                increment_workflow_fencing_token(&self.client, &data.workflow_id, 1).await,
+                None,
             )?;
         }
 
-        to_status(self.client.txn(queries).await)?;
-
-        let fencing_token = if data.is_nested {
-            found_fencing_token.unwrap_or(0)
-        } else {
-            to_status(get_workflow_fencing_token(&self.client, &data.workflow_id).await)?.unwrap()
-        };
         let hash_map = checkpoints
             .into_iter()
             .map(|value| (value.position_checksum.to_string(), value.value))
             .collect();
-        println!("hash_map: {:?}", hash_map);
+
         Ok(Response::new(LeaseWorkflowResponse {
             checkpoints: hash_map,
             fencing_token: fencing_token,
-            total_context_bound_checkpoints: total_workflow_context_based_checkpoints,
         }))
     }
 
@@ -238,11 +271,19 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<CompleteWorkflowRequest>,
     ) -> Result<Response<CompleteWorkflowResponse>, Status> {
         let data = request.into_inner();
-        let token = to_status(get_workflow_fencing_token(&self.client, &data.workflow_id).await)?;
-        return_error_if_true(token.is_none(), Status::aborted("fencing_token_not_found"))?;
+        let token = to_status(
+            get_workflow_fencing_token(&self.client, &data.workflow_id).await,
+            None,
+        )?;
+        return_error_if_true(
+            token.is_none(),
+            Status::aborted("fencing_token_not_found"),
+            None,
+        )?;
         return_error_if_true(
             token.unwrap() < data.fencing_token,
             Status::aborted("fencing_token_expired"),
+            None,
         )?;
         let result = match self
             .client

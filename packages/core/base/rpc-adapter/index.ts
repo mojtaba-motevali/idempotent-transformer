@@ -37,3 +37,4 @@ export interface IdempotentRpcAdapter {
 }
 
 export * from './interfaces';
+export * from './exceptions';

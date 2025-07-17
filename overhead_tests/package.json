@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node storage-test.js"
+    "test:parallel": "npx artillery run artillery.yaml"
   },
   "keywords": [],
   "author": "",
@@ -12,11 +12,11 @@
   "packageManager": "pnpm@10.9.0",
   "dependencies": {
     "@faker-js/faker": "^9.8.0",
-    "@idempotent-transformer/adapter-crypto": "0.1.9",
-    "@idempotent-transformer/adapter-message-pack": "0.1.10",
-    "@idempotent-transformer/adapter-redis": "0.1.14",
-    "@idempotent-transformer/adapter-zstd": "0.1.8",
-    "@idempotent-transformer/core": "0.1.10",
+    "@idempotent-transformer/checksum-adapter": "0.1.3",
+    "@idempotent-transformer/core": "0.1.33",
+    "@idempotent-transformer/grpc-adapter": "0.1.8",
+    "@idempotent-transformer/message-pack-adapter": "0.1.4",
+    "google-protobuf": "^3.21.4",
     "ioredis": "^5.6.1"
   }
 }

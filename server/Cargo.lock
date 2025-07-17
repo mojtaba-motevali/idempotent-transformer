@@ -1658,6 +1658,7 @@ dependencies = [
  "hiqlite-macros",
  "prost",
  "serde",
+ "strum",
  "tokio",
  "tonic",
  "tonic-build",
