@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test:parallel": "npx artillery run artillery.yaml"
+    "test:parallel-same": "npx artillery run --output report-same.json artillery.yaml",
+    "test:parallel-diff": "npx artillery run --output report-diff.json artillery-different-workflows.yaml"
   },
   "keywords": [],
   "author": "",
