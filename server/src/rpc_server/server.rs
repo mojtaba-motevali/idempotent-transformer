@@ -71,7 +71,6 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<CheckPointRequest>,
     ) -> Result<Response<CheckPointResponse>, Status> {
         let data = request.into_inner();
-        println!("Checkpoint {:?}", data);
         let (token, leased_checkpoint_result) = tokio::join!(
             get_workflow_fencing_token(&self.client, &data.workflow_id),
             release_checkpoint(&self.client, &data.workflow_id, data.position_checksum)
@@ -285,13 +284,13 @@ impl WorkflowServiceImpl for WorkflowService {
             Status::aborted("fencing_token_expired"),
             None,
         )?;
+        let expire_at = Utc::now().timestamp_millis() + data.expire_after;
         let result = match self
             .client
             .execute(
                 "UPDATE Workflows SET expire_at = $1, status = $2 WHERE id = $3",
                 params![
-                    Utc::now()
-                        .checked_add_signed(chrono::Duration::milliseconds(data.expire_after)),
+                    expire_at,
                     WorkflowStatus::Completed as i64,
                     data.workflow_id
                 ],

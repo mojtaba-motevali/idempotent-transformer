@@ -26,3 +26,14 @@ pub async fn create_or_get_workflow(
         expire_at: result.get::<Option<i64>>("expire_at"),
     })
 }
+
+pub async fn delete_expired_workflows(client: &Client) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let status = WorkflowStatus::Completed as i64;
+    client
+        .execute(
+            "DELETE FROM Workflows WHERE expire_at < $1 AND status = $2",
+            params![Utc::now().timestamp_millis(), status],
+        )
+        .await?;
+    Ok(())
+}

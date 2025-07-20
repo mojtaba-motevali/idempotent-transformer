@@ -9,6 +9,9 @@ use tokio::sync::oneshot;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
 
+use crate::cron::clean_up_workflows::clean_up_expired_workflows;
+
+mod cron;
 mod database;
 mod rpc_server;
 mod schema;
@@ -73,6 +76,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a channel for graceful shutdown
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+
+    // Start the cleanup workflow scheduler
+    if let Err(e) = clean_up_expired_workflows(&client).await {
+        error!("Error during clean up workflows: {}", e);
+        graceful_shutdown(&client).await?;
+        return Err(e);
+    }
+
     let client_clone = client.clone();
 
     // Spawn a task to handle shutdown signals

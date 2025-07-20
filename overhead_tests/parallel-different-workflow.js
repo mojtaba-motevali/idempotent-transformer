@@ -69,6 +69,7 @@ module.exports = {
       const runner = await transformer.startWorkflow(context._uid, {
         contextName: context,
         isNested: false,
+        retentionTime: 10000,
       });
 
       await runner.execute('task1', task1);
