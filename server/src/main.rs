@@ -13,6 +13,8 @@ use crate::cron::clean_up_workflows::clean_up_expired_workflows;
 
 mod cron;
 mod database;
+mod helpers;
+mod repositories;
 mod rpc_server;
 mod schema;
 mod services;

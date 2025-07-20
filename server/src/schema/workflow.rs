@@ -24,10 +24,7 @@ impl From<Row<'_>> for Workflow {
                 1 => WorkflowStatus::Completed,
                 _ => panic!("Invalid workflow status"),
             } as i64,
-            expire_at: match row.get::<Option<i64>>("expire_at") {
-                Some(expire_at) => Some(expire_at),
-                None => None,
-            },
+            expire_at: row.get::<Option<i64>>("expire_at"),
             created_at: row.get("created_at"),
         }
     }
