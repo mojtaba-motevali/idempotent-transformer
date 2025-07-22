@@ -4,7 +4,7 @@ config:
   # processor: "./parallel-same-workflow-long-running-task.js"
   phases:
     - arrivalRate: 50
-      duration: 20
+      duration: 10
 scenarios:
   - name: "Run SDK Workflow"
     flow:

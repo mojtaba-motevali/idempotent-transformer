@@ -22,19 +22,9 @@ pub async fn create_workflow(
     client: &Client,
     data: CreateWorkflowInput,
 ) -> Result<CreateWorkflowOutput, Box<dyn Error + Send + Sync>> {
-    let (workflow_id_result, found_fencing_token) = tokio::join!(
-        create_or_get_workflow(client, &data.workflow_id, WorkflowStatus::Running),
-        get_workflow_fencing_token(client, &data.workflow_id)
-    );
-    workflow_id_result?;
-
-    let found_fencing_token = found_fencing_token?;
-
-    let mut fencing_token = found_fencing_token.unwrap_or(-1);
-
-    if fencing_token == -1 {
-        fencing_token = increment_workflow_fencing_token(client, &data.workflow_id, 1).await?;
-    }
+    let workflow_id_result =
+        create_or_get_workflow(client, &data.workflow_id, WorkflowStatus::Running).await?;
+    let fencing_token = increment_workflow_fencing_token(client, &workflow_id_result.id, 1).await?;
 
     Ok(CreateWorkflowOutput { fencing_token })
 }
