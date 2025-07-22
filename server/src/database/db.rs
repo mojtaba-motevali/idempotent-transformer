@@ -47,6 +47,7 @@ async fn node_config(node_id: u64, nodes: Vec<Server>) -> NodeConfig {
     config.log_statements = false;
     config.tls_raft = None;
     config.tls_api = None;
+    println!("config: {:?}", config);
     config
 }
 

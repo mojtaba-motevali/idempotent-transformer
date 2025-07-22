@@ -1,0 +1,91 @@
+version: '3.9'
+
+services:
+  node1:
+    image: idempotency-server:latest # build or pull this image beforehand
+    container_name: node1
+    restart: unless-stopped
+    environment:
+      # gRPC service address inside the container
+      RPC_ADDR: '0.0.0.0:51000'
+      # Cluster member list:  id  addr_api          addr_raft
+      NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
+      DATA_DIR: '/app/data'
+      NODE_ID: '1'
+      ADDR_API: 'node1:8100'
+      ADDR_RAFT: 'node1:8200'
+      # Optional: let jemalloc return memory immediately
+      # MALLOC_CONF: "dirty_decay_ms:0,muzzy_decay_ms:0"
+    volumes:
+      - data1:/app/data
+    ports:
+      - '51000:51000' # RPC
+      - '8100:8100' # API
+      - '8200:8200' # Raft
+    networks:
+      - cluster_net
+
+  node2:
+    image: idempotency-server:latest
+    container_name: node2
+    restart: unless-stopped
+    environment:
+      RPC_ADDR: '0.0.0.0:51001'
+      NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
+      DATA_DIR: '/app/data'
+      NODE_ID: '2'
+      ADDR_API: 'node2:8101'
+      ADDR_RAFT: 'node2:8201'
+    volumes:
+      - data2:/app/data
+    ports:
+      - '51001:51001'
+      - '8101:8101'
+      - '8201:8201'
+    networks:
+      - cluster_net
+
+  node3:
+    image: idempotency-server:latest
+    container_name: node3
+    restart: unless-stopped
+    environment:
+      RPC_ADDR: '0.0.0.0:51002'
+      NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
+      DATA_DIR: '/app/data'
+      NODE_ID: '3'
+      ADDR_API: 'node3:8102'
+      ADDR_RAFT: 'node3:8202'
+    volumes:
+      - data3:/app/data
+    ports:
+      - '51002:51002'
+      - '8102:8102'
+      - '8202:8202'
+    networks:
+      - cluster_net
+
+# Named volumes so every replica keeps its own state
+volumes:
+  data1:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /dev/shm/data/node_1.local
+  data2:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /dev/shm/data/node_2.local
+  data3:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /dev/shm/data/node_3.local
+
+networks:
+  cluster_net:
+    driver: bridge

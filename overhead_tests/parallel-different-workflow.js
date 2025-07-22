@@ -3,10 +3,6 @@ const GrpcAdapter = require('@idempotent-transformer/grpc-adapter').GrpcAdapter;
 const MessagePack = require('@idempotent-transformer/message-pack-adapter').MessagePack;
 const CheckSumGenerator = require('@idempotent-transformer/checksum-adapter').CheckSumGenerator;
 const appendFile = require('fs').appendFile;
-const rpcAdapter = new GrpcAdapter({
-  host: 'localhost',
-  port: 51000,
-});
 const messagePack = MessagePack.getInstance();
 
 // Track task execution counts
@@ -27,48 +23,56 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Task definitions - same as your experiment
 const task1 = async () => {
   const now = Date.now();
-  await appendFileAsync(fileName, now.toString() + '\n');
   return now.toString();
 };
 
 const task2 = async () => {
   const now = Date.now();
-  await appendFileAsync(fileName, now.toString() + '\n');
   return now.toString();
 };
 
 const task3 = async () => {
   const now = Date.now();
-  await appendFileAsync(fileName, now.toString() + '\n');
   return now.toString();
 };
 
 const task4 = async () => {
   const now = Date.now();
-  await appendFileAsync(fileName, now.toString() + '\n');
   return now.toString();
 };
 
 const task5 = async () => {
   const now = Date.now();
-  appendFile(fileName, now.toString() + '\n', (err) => {
-    if (err) {
-      console.error(err);
-    }
-  });
+
   return now.toString();
 };
-const transformer = new IdempotentTransformer({
-  rpcAdapter,
-  serializer: messagePack,
-  checksumGenerator: new CheckSumGenerator(),
-});
+
+const TOTAL_CLUSTER_NODES = 1;
+// round-robin port selection to balance load across nodes
+const BASE_PORT = 51000;
+const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
+let nextNodeIndex = 0;
+const getNextPort = () => {
+  const port = nodePorts[nextNodeIndex];
+  nextNodeIndex = (nextNodeIndex + 1) % nodePorts.length;
+  return port;
+};
+
 module.exports = {
   runWorkflow: async (context, events) => {
+    const rpcAdapter = new GrpcAdapter({
+      host: 'localhost',
+      port: getNextPort(),
+    });
+    const transformer = new IdempotentTransformer({
+      rpcAdapter,
+      serializer: messagePack,
+      checksumGenerator: new CheckSumGenerator(),
+      log: null
+    });
     try {
       const runner = await transformer.startWorkflow(context._uid, {
         contextName: context,
-        isNested: false,
         retentionTime: 10000,
       });
 
