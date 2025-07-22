@@ -50,19 +50,12 @@ Given('an asynchronous task that returns a value', async function () {
 });
 When('I wrap the task with the idempotent execution wrapper', async function () {
   runner = await transformer.startWorkflow(workflowId, {
-    contextName: 'test',
-    isNested: false,
+    workflowName: 'test',
   });
 });
 
 When('I execute the wrapped task', async function () {
-  firstResult = await runner.execute(
-    'Do test',
-    async () =>
-      await asyncTask({
-        input,
-      })
-  );
+  firstResult = await runner.execute(input, async () => await asyncTask({ input }));
 });
 
 Then('the task should execute successfully and the result should be returned', async function () {
@@ -76,16 +69,9 @@ Then('the task should execute successfully and the result should be returned', a
 
 When('I execute the wrapped task again', async function () {
   runner = await transformer.startWorkflow(workflowId, {
-    contextName: 'test',
-    isNested: false,
+    workflowName: 'test',
   });
-  secondResult = await runner.execute(
-    'Do test',
-    async () =>
-      await asyncTask({
-        input,
-      })
-  );
+  secondResult = await runner.execute(input, async () => await asyncTask({ input }));
 });
 
 Then(

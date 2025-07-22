@@ -1,8 +1,9 @@
 export interface LeaseCheckpointInput {
-  workflow_id: string;
-  fencing_token: number;
-  lease_timeout: number;
-  position_checksum: number;
+  workflowId: string;
+  fencingToken: number;
+  leaseTimeout: number;
+  positionChecksum: number;
+  idempotencyChecksum: number;
 }
 
 export interface LeaseCheckpointOutput {

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckpointValue {
     pub position_checksum: i64,
+    pub idempotency_checksum: i64,
     pub value: Vec<u8>,
 }
 
@@ -21,6 +22,7 @@ impl From<Row<'_>> for CheckpointValue {
     fn from(mut row: Row<'_>) -> Self {
         Self {
             position_checksum: row.get("position_checksum"),
+            idempotency_checksum: row.get("idempotency_checksum"),
             value: row.get("value"),
         }
     }

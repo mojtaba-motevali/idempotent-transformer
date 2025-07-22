@@ -7,8 +7,14 @@ pub mod workflow_service {
 use std::error::Error;
 use std::io;
 
+use crate::repositories::workflows::get_workflow;
+use crate::rpc_server::server::workflow_service::{
+    ReleaseCheckpointRequest, ReleaseCheckpointResponse, WorkflowStartRequest,
+    WorkflowStartResponse, WorkflowStatusRequest, WorkflowStatusResponse,
+};
 use crate::services::checkpoint_service::{
     CheckpointInput, LeaseCheckpointInput, handle_checkpoint, handle_lease_checkpoint,
+    release_checkpoint,
 };
 use crate::services::workflow_service::{
     CreateWorkflowInput, FinishWorkflowInput, create_workflow, finish_workflow,
@@ -16,8 +22,8 @@ use crate::services::workflow_service::{
 
 use workflow_service::{
     CheckPointRequest, CheckPointResponse, CompleteWorkflowRequest, CompleteWorkflowResponse,
-    LeaseCheckpointRequest, LeaseCheckpointResponse, LeaseWorkflowRequest, LeaseWorkflowResponse,
-    lease_checkpoint_response::Response::Value, workflow_service_impl_server::WorkflowServiceImpl,
+    LeaseCheckpointRequest, LeaseCheckpointResponse, lease_checkpoint_response::Response::Value,
+    workflow_service_impl_server::WorkflowServiceImpl,
     workflow_service_impl_server::WorkflowServiceImplServer,
 };
 
@@ -25,15 +31,15 @@ fn to_status<T>(result: Result<T, Box<dyn Error + Send + Sync>>) -> Result<T, St
     result.map_err(|e| {
         if let Some(io_err) = e.downcast_ref::<io::Error>() {
             match io_err.kind() {
-                io::ErrorKind::Interrupted => Status::aborted("interrupted"),
-                io::ErrorKind::InvalidData => Status::aborted("invalid_data"),
-                io::ErrorKind::InvalidInput => Status::aborted("invalid_input"),
-                io::ErrorKind::Other => Status::internal("Something went wrong."),
+                io::ErrorKind::Interrupted => Status::aborted(io_err.to_string()),
+                io::ErrorKind::InvalidData => Status::aborted(io_err.to_string()),
+                io::ErrorKind::InvalidInput => Status::aborted(io_err.to_string()),
+                io::ErrorKind::Other => Status::internal(io_err.to_string()),
                 _ => Status::internal(io_err.to_string()),
             }
         } else {
             // Not an io::Error — treat as unhandled/internal
-            Status::internal(e.to_string())
+            Status::internal("Something went wrong.")
         }
     })
 }
@@ -58,9 +64,8 @@ impl WorkflowServiceImpl for WorkflowService {
                     workflow_id: data.workflow_id,
                     fencing_token: data.fencing_token,
                     position_checksum: data.position_checksum,
-                    workflow_context_name: data.workflow_context_name,
-                    checkpoint_context_name: data.checkpoint_context_name,
                     value: data.value,
+                    idempotency_checksum: data.idempotency_checksum,
                 },
             )
             .await,
@@ -83,6 +88,7 @@ impl WorkflowServiceImpl for WorkflowService {
                     fencing_token: data.fencing_token,
                     position_checksum: data.position_checksum,
                     lease_timeout: data.lease_timeout,
+                    idempotency_checksum: data.idempotency_checksum,
                 },
             )
             .await,
@@ -92,24 +98,21 @@ impl WorkflowServiceImpl for WorkflowService {
         }))
     }
 
-    async fn lease_workflow(
+    async fn workflow_start(
         &self,
-        request: Request<LeaseWorkflowRequest>,
-    ) -> Result<Response<LeaseWorkflowResponse>, Status> {
+        request: Request<WorkflowStartRequest>,
+    ) -> Result<Response<WorkflowStartResponse>, Status> {
         let data = request.into_inner();
         let result = to_status(
             create_workflow(
                 &self.client,
                 CreateWorkflowInput {
                     workflow_id: data.workflow_id,
-                    is_nested: data.is_nested,
-                    prefetch_checkpoints: data.prefetch_checkpoints,
                 },
             )
             .await,
         )?;
-        Ok(Response::new(LeaseWorkflowResponse {
-            checkpoints: result.checkpoints,
+        Ok(Response::new(WorkflowStartResponse {
             fencing_token: result.fencing_token,
         }))
     }
@@ -131,6 +134,36 @@ impl WorkflowServiceImpl for WorkflowService {
             .await,
         )?;
         Ok(Response::new(CompleteWorkflowResponse {}))
+    }
+
+    async fn workflow_status(
+        &self,
+        request: Request<WorkflowStatusRequest>,
+    ) -> Result<Response<WorkflowStatusResponse>, Status> {
+        let data = request.into_inner();
+        let result = to_status(get_workflow(&self.client, &data.workflow_id).await)?;
+        if let Some(workflow) = result {
+            Ok(Response::new(WorkflowStatusResponse {
+                workflow_id: workflow.id,
+                status: workflow.status,
+                expire_at: workflow.expire_at,
+                completed_at: workflow.completed_at,
+                created_at: workflow.created_at,
+            }))
+        } else {
+            Err(Status::not_found("workflow_not_found"))
+        }
+    }
+
+    async fn release_checkpoint(
+        &self,
+        request: Request<ReleaseCheckpointRequest>,
+    ) -> Result<Response<ReleaseCheckpointResponse>, Status> {
+        let data = request.into_inner();
+        to_status(
+            release_checkpoint(&self.client, &data.workflow_id, data.position_checksum).await,
+        )?;
+        Ok(Response::new(ReleaseCheckpointResponse {}))
     }
 }
 

@@ -7,24 +7,41 @@ package workflow_service;
 // service which can be executed
 service WorkflowServiceImpl {
     // function which can be called
-    rpc lease_workflow(LeaseWorkflowRequest) returns (LeaseWorkflowResponse);
+    rpc workflow_start(WorkflowStartRequest) returns (WorkflowStartResponse);
     rpc checkpoint(CheckPointRequest) returns (CheckPointResponse);
     rpc lease_checkpoint(LeaseCheckpointRequest) returns (LeaseCheckpointResponse);
     rpc complete_workflow(CompleteWorkflowRequest) returns (CompleteWorkflowResponse);
+    rpc workflow_status(WorkflowStatusRequest) returns (WorkflowStatusResponse);
+    rpc release_checkpoint(ReleaseCheckpointRequest) returns (ReleaseCheckpointResponse);
 }
 
-
-
-message LeaseWorkflowRequest {
+message ReleaseCheckpointRequest {
     string workflow_id = 1;
-    bool is_nested = 2;
-    bool prefetch_checkpoints = 3;
-    string context_name = 4;
+    int64 position_checksum = 2;
 }
 
-message LeaseWorkflowResponse {
-    map<string, bytes> checkpoints = 1;
-    int64 fencing_token = 2;
+message ReleaseCheckpointResponse {}
+
+message WorkflowStatusRequest {
+    string workflow_id = 1;
+}
+
+message WorkflowStatusResponse {
+    string workflow_id = 1;
+    int64 status = 2;
+    optional int64 expire_at = 3;
+    int64 created_at = 4;
+    optional int64 completed_at = 5;
+}
+
+message WorkflowStartRequest {
+    string workflow_id = 1;
+    bool prefetch_checkpoints = 2;
+    string context_name = 3;
+}
+
+message WorkflowStartResponse {
+    int64 fencing_token = 1;
 }
 
 // argument
@@ -34,9 +51,9 @@ message CheckPointRequest {
     bytes value = 2;
     int64 fencing_token = 3;
     int64 position_checksum = 4;
+    int64 idempotency_checksum = 5;
     // for readability
-    string workflow_context_name = 5;
-    string checkpoint_context_name = 6;
+    optional string task_name = 6;
 }
 
 // return value
@@ -50,6 +67,7 @@ message LeaseCheckpointRequest {
     int64 fencing_token = 2;
     int64 lease_timeout = 3;
     int64 position_checksum = 4;
+    int64 idempotency_checksum = 5;
 }
 
 message LeaseCheckpointResponse {

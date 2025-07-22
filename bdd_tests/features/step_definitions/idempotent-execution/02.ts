@@ -41,21 +41,15 @@ BeforeAll(async () => {
   transformer = await IdempotentFactory.getInstance().build({
     rpcAdapter,
     serializer: MessagePack.getInstance(),
-    logger: console,
+    logger: null,
     checksumGenerator: new CheckSumGenerator(),
   });
 });
 
-// Given a workflow including 4 tasks
-// When I execute 2 tasks successfully and third one fails
-// Then I retry execution of the all tasks
-// Then the library does not execute the first two tasks and successfully executes all tasks.
-
 // Setup transformer with in-memory storage for testing
 Given('a workflow including 4 tasks', async function () {
   runner = await transformer.startWorkflow(idempotentWorkflowKey, {
-    contextName: 'workflow-with-4-tasks',
-    isNested: false,
+    workflowName: 'workflow-with-4-tasks',
   });
 });
 When('I execute 2 tasks successfully and third one fails', async function () {
@@ -63,7 +57,9 @@ When('I execute 2 tasks successfully and third one fails', async function () {
   try {
     const result1 = await runner.execute('task1', async () => await workflowTasks.task1(input));
     const result2 = await runner.execute('task2', async () => await workflowTasks.task2(result1));
-    await runner.execute('task3', async () => await workflowTasks.task3(result2));
+    await runner.execute('task3', async () => await workflowTasks.task3(result2), {
+      leaseTimeout: 3000,
+    });
     await runner.execute('task4', async () => await workflowTasks.task4(input));
     await runner.complete();
   } catch (err) {
@@ -75,12 +71,13 @@ When('I execute 2 tasks successfully and third one fails', async function () {
 Then('I retry execution of the all tasks', async function () {
   ++retryCount;
   const newRunner = await transformer.startWorkflow(idempotentWorkflowKey, {
-    contextName: 'workflow-with-4-tasks',
-    isNested: false,
+    workflowName: 'workflow-with-4-tasks',
   });
   await newRunner.execute('task1', async () => await workflowTasks.task1(input));
   await newRunner.execute('task2', async () => await workflowTasks.task2(input));
-  await newRunner.execute('task3', async () => await workflowTasks.task3(input));
+  await newRunner.execute('task3', async () => await workflowTasks.task3(input), {
+    leaseTimeout: 3000,
+  });
   await newRunner.execute('task4', async () => await workflowTasks.task4(input));
   await newRunner.complete();
 });
@@ -88,7 +85,6 @@ Then('I retry execution of the all tasks', async function () {
 Then(
   'the task should execute successfully and all tasks should have been executed only once',
   async function () {
-    console.log('workflowExecution', workflowExecution);
     expect(workflowExecution[0]).to.equal(1);
     expect(workflowExecution[1]).to.equal(1);
     expect(workflowExecution[2]).to.equal(1);

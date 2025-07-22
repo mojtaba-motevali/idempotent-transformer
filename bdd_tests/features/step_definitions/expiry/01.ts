@@ -1,75 +1,67 @@
-// import { Given, When, Then, BeforeAll, AfterAll } from '@cucumber/cucumber';
-// import { expect } from 'chai';
-// import { IdempotentTransformer, IIdempotentTaskOptions } from '@idempotent-transformer/core';
-// import { PostgresAdapter } from '@idempotent-transformer/postgres-adapter';
-// import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
-// import { faker } from '@faker-js/faker';
-// import { IdempotentFactory } from '@idempotent-transformer/core';
-// import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
+import { Given, BeforeAll, Then, setDefaultTimeout } from '@cucumber/cucumber';
+import { expect } from 'chai';
+import { IdempotentRunnerResult, IdempotentTransformer } from '@idempotent-transformer/core';
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
+import { faker } from '@faker-js/faker';
+import { IdempotentFactory } from '@idempotent-transformer/core';
+import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 
-// let wrappedTask: (input: any, options?: IIdempotentTaskOptions) => Promise<any>;
-// let storage: PostgresAdapter;
-// let transformer: IdempotentTransformer;
-// const taskInput = faker.lorem.sentence();
-// const taskResult = faker.lorem.sentence();
-// let taskUniqueId: string;
-// const workflowId = faker.string.uuid();
-// const ttlMs = 3000; // 30 seconds
+setDefaultTimeout(15000);
 
-// BeforeAll(async () => {
-//   storage = new PostgresAdapter('postgres://postgres:postgres@localhost:5432/postgres');
-//   transformer = await IdempotentFactory.getInstance().build({
-//     storage,
-//     serializer: MessagePack.getInstance(),
-//     logger: null,
-//     checksumGenerator: new CheckSumGenerator(),
-//   });
-// });
+let transformer: IdempotentTransformer;
+const taskResult = faker.lorem.sentence();
+const workflowId = faker.string.uuid();
+const ttlMs = 3000; // 5 seconds
+let rpcAdapter: GrpcAdapter;
+let runner: IdempotentRunnerResult;
 
-// Given('a TTL of 2 seconds is configured for state entries S1', async function () {
-//   const wrapped = await transformer.makeIdempotent(
-//     workflowId,
-//     {
-//       task: async (input: any) => taskResult,
-//     },
-//     {
-//       retentionTime: ttlMs,
-//     }
-//   );
-//   wrappedTask = wrapped.task;
-// });
+// Feature: Optional expiry (TTL) for state entries
 
-// Given('a task result "Hello, world!" is ready to be persisted S1', async function () {
-//   // Already set up in previous step
-// });
+//   Scenario: Persisting a task result with a TTL
+//     Given a TTL of 5 seconds is configured for workflow completion data state
+//     When a task is executed and workflow is completed
+//     Then wait for 10 seconds and the workflow must not be found
 
-// When('the task result is serialized and persisted to the state store S1', async function () {
-//   await wrappedTask(taskInput);
-//   taskUniqueId = (
-//     await transformer.createCheckSum({
-//       workflowId,
-//       contextName: 'task',
-//     })
-//   ).toString();
-// });
+BeforeAll(async () => {
+  rpcAdapter = new GrpcAdapter({
+    host: 'localhost',
+    port: 51000,
+  });
+  transformer = await IdempotentFactory.getInstance().build({
+    rpcAdapter,
+    serializer: MessagePack.getInstance(),
+    logger: null,
+    checksumGenerator: new CheckSumGenerator(),
+  });
+});
 
-// Then('the persisted entry should exist in the state store immediately S1', async function () {
-//   const persisted = await storage.find({
-//     workflowId,
-//     taskId: taskUniqueId,
-//   });
-//   expect(persisted).to.not.be.null;
-// });
+Given('a TTL of 5 seconds is configured for workflow completion data state', async function () {
+  runner = await transformer.startWorkflow(workflowId, {
+    workflowName: 'workflow-with-4-tasks',
+    completedRetentionTime: ttlMs,
+  });
+});
 
-// Then('after 3 seconds, the entry should be expired and no longer available S1', async function () {
-//   await new Promise((resolve) => setTimeout(resolve, 3000));
-//   const persisted = await storage.find({
-//     workflowId,
-//     taskId: taskUniqueId,
-//   });
-//   expect(persisted).to.be.null;
-// });
+Given('a task is executed and workflow is completed', async function () {
+  // Already set up in previous step
+  await runner.execute('task', async () => taskResult);
+  await runner.complete();
+});
 
-// AfterAll(async () => {
-//   await storage.disconnect();
-// });
+Then('wait for 10 seconds and the workflow must not be found', async function () {
+  const persisted = await runner.getWorkflowStatus({
+    workflowId,
+  });
+  expect(persisted?.id).to.equal(workflowId);
+  await new Promise((resolve) => setTimeout(resolve, 12000));
+  let error: Error | undefined;
+  try {
+    await runner.getWorkflowStatus({
+      workflowId,
+    });
+  } catch (err) {
+    error = err as Error;
+  }
+  expect(error?.message).to.equal('workflow_not_found');
+});

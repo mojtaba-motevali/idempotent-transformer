@@ -1,6 +1,6 @@
 import { IdempotentCheckSumGenerator, IdempotentLogger, IdempotentSerializer } from '../base';
-import { IdempotentRpcAdapter } from '../base/rpc-adapter';
-import { CheckpointLeasedByOtherWorkerException } from '../base/rpc-adapter/exceptions';
+import { ErrCodes, IdempotentRpcAdapter, WorkflowStatusInput } from '../base/rpc-adapter';
+
 import { WorkflowAbortedException } from './exception/workflow-aborted.exception';
 import {
   IdempotentTransformerInput,
@@ -8,6 +8,10 @@ import {
   IIdempotentTaskOptions,
   IdempotentRunnerResult,
 } from './interfaces';
+
+function isPromise<T = any>(value: any): value is Promise<T> {
+  return value !== null && typeof value === 'object' && typeof value.then === 'function';
+}
 
 export class IdempotentTransformer {
   private serializer: IdempotentSerializer;
@@ -24,72 +28,48 @@ export class IdempotentTransformer {
 
   async startWorkflow(
     workflowId: string,
-    {
-      prefetchCheckpoints = false,
-      retentionTime,
-      contextName: workflowContextName,
-      isNested = false,
-    }: IdempotentTransformerOptions
+    { completedRetentionTime, workflowName }: IdempotentTransformerOptions
   ): Promise<IdempotentRunnerResult> {
     // 1 day
-    const { fencing_token, checkpoints } = await this.rpcAdapter.leaseWorkflow({
-      workflow_id: workflowId,
-      is_nested: isNested,
-      prefetch_checkpoints: prefetchCheckpoints,
-      context_name: workflowContextName,
+    const { fencingToken } = await this.rpcAdapter.startWorkflow({
+      workflowId,
+      name: workflowName,
     });
     this.logger?.debug(
-      `Leased workflow ${workflowId} with fencing token ${fencing_token}  context bound checkpoints`
+      `Leased workflow ${workflowId} with fencing token ${fencingToken}  context bound checkpoints`
     );
     let counter = 0;
     const result = {
       complete: async () => {
         this.logger?.debug(`Completing workflow ${workflowId}`);
         await this.rpcAdapter.completeWorkflow({
-          workflow_id: workflowId,
-          fencing_token,
-          expire_after: retentionTime || 1000 * 60 * 60 * 24,
+          workflowId,
+          fencingToken,
+          expireAfter: completedRetentionTime || 1000 * 60 * 60 * 24,
         });
       },
-      execute: async (
-        idempotencyKey: string,
-        fn: (...args: any[]) => Promise<any>,
-        taskOptions?: IIdempotentTaskOptions
-      ) => {
-        const tag = `workflow_id:${workflowId}| context:${workflowContextName}| idempotency_key:${idempotencyKey}| fencing_token:${fencing_token}`;
+      execute: async (idempotencyKey, task, taskOptions) => {
+        const tag = `workflowId:${workflowId} | context:${workflowName} | fencingToken:${fencingToken}`;
         this.logger?.debug(`${tag} Executing function`);
-        const plain_checksum = `${workflowId}-${workflowContextName}-${idempotencyKey}-${counter}`;
-        this.logger?.debug(`${tag} checkpoint_checksum plain: ${plain_checksum}`);
-        const checkpoint_checksum = await this.checksumGenerator.generate(plain_checksum);
-        this.logger?.debug(`checkpoint_checksum plain: ${checkpoint_checksum}`);
+        const plainChecksum = `${workflowId}-${counter}`;
+        this.logger?.debug(`${tag} checkpointChecksum plain: ${plainChecksum}`);
+        const [positionChecksum, idempotencyChecksum] = await Promise.all([
+          this.checksumGenerator.generate(plainChecksum),
+          this.checksumGenerator.generate(idempotencyKey),
+        ]);
+        this.logger?.debug(`${tag} checkpointChecksum plain: ${positionChecksum}`);
 
-        const totalCheckpoints = Object.keys(checkpoints).length;
-        this.logger?.debug(`Prefetched ${totalCheckpoints} checkpoints for ${tag}`);
-        // if prefetchCheckpoints is true, then we need to check if the checkpoint is already in the cache
-        if (totalCheckpoints > 0) {
-          const checkpointValue = checkpoints[checkpoint_checksum.toString()];
-          this.logger?.debug(`Found checkpoint ${checkpoint_checksum} for ${tag}`);
-          if (checkpointValue) {
-            const deserializedValue = await this.serializer.deserialize(checkpointValue);
-            counter++;
-            return deserializedValue;
-          } else {
-            throw new Error('Undeterministic checkpoint found');
-          }
-        }
-
-        this.logger?.debug(`No cached checkpoints found for ${tag}`);
-        // if total_context_bound_checkpoints is greater than 0, then we need to lease a checkpoint
         while (true) {
           try {
             this.logger?.debug(
-              `Leasing checkpoint fencing:${fencing_token}| workflow_id:${workflowId}| context:${workflowContextName}| idempotency_key:${idempotencyKey}| position_checksum:${checkpoint_checksum}`
+              `Leasing checkpoint fencing:${fencingToken}| workflowId:${workflowId}| context:${workflowName}| idempotencyKey:${idempotencyKey}| positionChecksum:${positionChecksum}`
             );
             const checkpoint = await this.rpcAdapter.leaseCheckpoint({
-              workflow_id: workflowId,
-              fencing_token,
-              lease_timeout: taskOptions?.leaseTimeout || 1000 * 30,
-              position_checksum: checkpoint_checksum,
+              workflowId,
+              fencingToken,
+              leaseTimeout: taskOptions?.leaseTimeout || 1000 * 30,
+              positionChecksum,
+              idempotencyChecksum,
             });
             if (checkpoint.value) {
               const deserializedValue = await this.serializer.deserialize(checkpoint.value);
@@ -101,7 +81,7 @@ export class IdempotentTransformer {
             this.logger?.debug(
               `Error leasing checkpoint for ${tag}: ${err instanceof Error ? err.message : String(err)}`
             );
-            if (err instanceof CheckpointLeasedByOtherWorkerException) {
+            if (err instanceof Error && err.message === ErrCodes.CheckpointLeasedByOtherWorker) {
               await this.waitFor(500);
             } else {
               throw err;
@@ -112,21 +92,36 @@ export class IdempotentTransformer {
         this.logger?.debug(
           `Executing function ${tag} with task options ${JSON.stringify(taskOptions)}`
         );
-        const functionExecutionResult = await fn();
+        const intermediateResult = task();
+        let taskResult;
 
-        const serializedResult = await this.serializer.serialize(functionExecutionResult);
+        try {
+          if (isPromise(intermediateResult)) {
+            taskResult = await intermediateResult;
+          } else {
+            taskResult = intermediateResult;
+          }
+        } catch (err) {
+          // release checkpoint
+          await this.rpcAdapter.releaseLeaseCheckpoint({
+            workflowId,
+            positionChecksum,
+          });
+          throw err;
+        }
+
+        const serializedResult = await this.serializer.serialize(taskResult);
         this.logger?.debug(`Serialized result for ${tag} is ${serializedResult}`);
         let abort = false;
         let i = 0;
         while (i < 3) {
           try {
             const checkpointResult = await this.rpcAdapter.checkpoint({
-              workflow_id: workflowId,
-              fencing_token,
-              position_checksum: checkpoint_checksum,
+              workflowId,
+              fencingToken,
+              positionChecksum,
               value: serializedResult,
-              workflow_context_name: workflowContextName,
-              checkpoint_context_name: idempotencyKey,
+              idempotencyChecksum,
             });
             abort = checkpointResult.abort;
             break;
@@ -144,7 +139,10 @@ export class IdempotentTransformer {
         }
 
         counter++;
-        return functionExecutionResult;
+        return taskResult;
+      },
+      getWorkflowStatus: async (args: WorkflowStatusInput) => {
+        return this.rpcAdapter.getWorkflowStatus(args);
       },
     } as IdempotentRunnerResult;
 

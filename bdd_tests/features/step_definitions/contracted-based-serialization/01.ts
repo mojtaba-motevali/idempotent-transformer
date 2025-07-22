@@ -96,29 +96,22 @@ const userDefinedClassTask = async () => {
     new Date()
   );
 };
-// Scenario: Serialize a user-defined class as a task result
-// Given a user-defined class with private attributes
-// And a task that returns an instance of this class
-// When the task result is serialized
-// Then the result can be decoded back to an instance of the user-defined class
 
-// Setup transformer with in-memory storage for testing
 Given(
   'a user-defined class with private attributes and a task that returns an instance of this class',
   async function () {
     // Defined in the beforeAll block
     runner = await transformer.startWorkflow(workflowId, {
-      contextName: 'user-defined-class',
-      isNested: false,
+      workflowName: 'user-defined-class',
     });
   }
 );
 
 When('the task is executed twice to showcase a retry operation', async function () {
   firstResult = await runner.execute('user-defined-class', userDefinedClassTask);
+  // retry the workflow
   runner = await transformer.startWorkflow(workflowId, {
-    contextName: 'user-defined-class',
-    isNested: false,
+    workflowName: 'user-defined-class',
   });
   secondResult = await runner.execute('user-defined-class', userDefinedClassTask);
   await runner.complete();

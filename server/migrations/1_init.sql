@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS Workflows (
     id VARCHAR(255) NOT NULL PRIMARY KEY,
     status INTEGER NOT NULL,
     expire_at TIMESTAMP,
+    completed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL
 );
 
@@ -18,8 +19,7 @@ CREATE TABLE IF NOT EXISTS Checkpoints (
     workflow_id VARCHAR(255) NOT NULL REFERENCES Workflows (id) ON DELETE CASCADE,
     position_checksum INTEGER NOT NULL,
     value BYTEA,
-    workflow_context_name VARCHAR(255) NOT NULL,
-    checkpoint_context_name VARCHAR(255) NOT NULL,
+    idempotency_checksum INTEGER NOT NULL,
     created_at TIMESTAMP NOT NULL
 );
 

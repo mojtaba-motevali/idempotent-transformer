@@ -1,3 +1,4 @@
+import { WorkflowStatusInput, WorkflowStatusOutput } from '../../base';
 import { IIdempotentTaskOptions } from './idempotent-options.interface';
 
 export interface MakeIdempotentInput<T extends Record<string, (input: any) => any>> {
@@ -6,11 +7,12 @@ export interface MakeIdempotentInput<T extends Record<string, (input: any) => an
 
 export type IdempotentRunnerResult = {
   complete: () => Promise<void>;
-  execute: (
+  execute: <R>(
     idempotencyKey: string,
-    fn: (...args: any[]) => Promise<any>,
+    task: (() => Promise<R>) | (() => R),
     options?: IIdempotentTaskOptions
-  ) => Promise<any>;
+  ) => Promise<R>;
+  getWorkflowStatus: (args: WorkflowStatusInput) => Promise<WorkflowStatusOutput>;
 };
 
 export interface IdempotentTransformerOptions {
@@ -18,23 +20,10 @@ export interface IdempotentTransformerOptions {
    * The number of milliseconds when the task result will be considered expired.
    * @default null
    */
-  retentionTime?: number | null;
-
-  /**
-   * Whether to prefetch checkpoints. Use this when number of tasks and their result are known to you.
-   * There is a trade off between memory usage and performance.
-   * @default false
-   */
-  prefetchCheckpoints?: boolean;
+  completedRetentionTime?: number | null;
 
   /**
    * The context name to use for the workflow. This is used to differentiate nested workflows.
    */
-  contextName: string;
-
-  /**
-   * The workflow id to use for the workflow.
-   * @default false
-   */
-  isNested?: boolean;
+  workflowName: string;
 }

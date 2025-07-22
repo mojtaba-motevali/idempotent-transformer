@@ -1,7 +1,7 @@
 export interface CompleteWorkflowInput {
-  workflow_id: string;
-  fencing_token: number;
-  expire_after: number;
+  workflowId: string;
+  fencingToken: number;
+  expireAfter: number;
 }
 
 export interface CompleteWorkflowOutput {}

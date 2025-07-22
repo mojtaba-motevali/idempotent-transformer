@@ -63,9 +63,8 @@ Given(
         return input;
       },
       task2: async () => {
-        const innerRunner = await transformer.startWorkflow(idempotentWorkflowKey, {
-          contextName: 'inner workflow with 3 tasks',
-          isNested: true,
+        const innerRunner = await transformer.startWorkflow(`${idempotentWorkflowKey}-task2`, {
+          workflowName: 'inner workflow with 3 tasks',
         });
         const result = await innerRunner.execute('task5', async () => innerWorkflowTasks.task5());
         const result2 = await innerRunner.execute('task6', async () => innerWorkflowTasks.task6());
@@ -89,11 +88,10 @@ When('I execute second task of the inner workflow and fails', async function () 
   let error: unknown;
   try {
     runner = await transformer.startWorkflow(idempotentWorkflowKey, {
-      contextName: 'a workflow with 4 tasks',
-      isNested: false,
+      workflowName: 'a workflow with 4 tasks',
     });
     const result1 = await runner.execute('task1', async () => outerWorkflowTasks.task1());
-    const result2 = await outerWorkflowTasks.task2();
+    const result2 = await runner.execute('task2', async () => outerWorkflowTasks.task2());
     await runner.execute('task3', async () => outerWorkflowTasks.task3());
     await runner.execute('task4', async () => outerWorkflowTasks.task4());
     await runner.complete();
@@ -105,19 +103,15 @@ When('I execute second task of the inner workflow and fails', async function () 
 
 Then('I retry the outer workflow to recover from the failure', async function () {
   runner = await transformer.startWorkflow(idempotentWorkflowKey, {
-    contextName: 'a workflow with 4 tasks',
-    isNested: false,
+    workflowName: 'a workflow with 4 tasks',
   });
   ++retryCount;
-  const runnerRetry = await transformer.startWorkflow(idempotentWorkflowKey, {
-    contextName: 'a workflow with 4 tasks',
-    isNested: false,
-  });
-  await runnerRetry.execute('task1', async () => outerWorkflowTasks.task1());
-  const result2 = await outerWorkflowTasks.task2();
-  await runnerRetry.execute('task3', async () => outerWorkflowTasks.task3());
-  await runnerRetry.execute('task4', async () => outerWorkflowTasks.task4());
-  await runnerRetry.complete();
+
+  await runner.execute('task1', async () => outerWorkflowTasks.task1());
+  await runner.execute('task2', async () => outerWorkflowTasks.task2());
+  await runner.execute('task3', async () => outerWorkflowTasks.task3());
+  await runner.execute('task4', async () => outerWorkflowTasks.task4());
+  await runner.complete();
 });
 
 Then(

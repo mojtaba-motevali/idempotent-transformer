@@ -33,7 +33,7 @@ pub async fn lease_checkpoint(
     })
 }
 
-pub async fn release_checkpoint(
+pub async fn remove_leased_checkpoint(
     client: &Client,
     workflow_id: &str,
     position_checksum: i64,

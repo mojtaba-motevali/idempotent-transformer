@@ -1,40 +1,38 @@
 import { credentials, ServiceError, VerifyOptions } from '@grpc/grpc-js';
 import {
   CheckpointInput,
-  CheckpointLeasedByOtherWorkerException,
   CheckpointOutput,
   CompleteWorkflowInput,
   CompleteWorkflowOutput,
-  FencingTokenExpiredException,
   IdempotentRpcAdapter,
-  NestedWorkflowFencingTokenConflictException,
   LeaseCheckpointInput,
   LeaseCheckpointOutput,
-  LeaseWorkflowInput,
-  LeaseWorkflowOutput,
-  LeaseTimeoutNotFoundException,
-  FencingTokenNotFoundException,
+  WorkflowStatusInput,
+  WorkflowStatusOutput,
+  ErrCodes,
+  StartWorkflowInput,
+  StartWorkflowOutput,
 } from '@idempotent-transformer/core';
 import { WorkflowServiceImplClient } from '../gen/workflow_service_grpc_pb';
 import {
   CheckPointRequest,
   CompleteWorkflowRequest,
   LeaseCheckpointRequest,
-  LeaseWorkflowRequest,
+  ReleaseCheckpointRequest,
+  WorkflowStartRequest,
+  WorkflowStatusRequest,
 } from '../gen/workflow_service_pb';
+import {
+  ReleaseLeaseCheckpointInput,
+  ReleaseLeaseCheckpointOutput,
+} from '@idempotent-transformer/core/dist/base/rpc-adapter/interfaces/release-leas-checkpoint.interface';
 
-const exceptions = {
-  ['checkpoint_leased_by_other_worker']: CheckpointLeasedByOtherWorkerException,
-  ['fencing_token_expired']: FencingTokenExpiredException,
-  ['nested_workflow_fencing_token_conflict']: NestedWorkflowFencingTokenConflictException,
-  ['lease_timeout_not_found']: LeaseTimeoutNotFoundException,
-  ['fencing_token_not_found']: FencingTokenNotFoundException,
-};
-
+const exceptions = Object.values(ErrCodes);
 const handleError = (err: ServiceError) => {
-  const Exception = exceptions[err.details as keyof typeof exceptions];
-  if (Exception) {
-    return new Exception(err.details);
+  const code = err.details;
+  const exception = exceptions.find((errCode) => errCode === code);
+  if (exception || code) {
+    return new Error(code);
   }
   return err;
 };
@@ -62,21 +60,18 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     );
   }
 
-  async leaseWorkflow(input: LeaseWorkflowInput): Promise<LeaseWorkflowOutput> {
-    const request = new LeaseWorkflowRequest();
-    request.setWorkflowId(input.workflow_id);
-    request.setIsNested(input.is_nested);
-    request.setContextName(input.context_name);
-    request.setPrefetchCheckpoints(input.prefetch_checkpoints);
+  async startWorkflow(input: StartWorkflowInput): Promise<StartWorkflowOutput> {
+    const request = new WorkflowStartRequest();
+    request.setWorkflowId(input.workflowId);
+    request.setContextName(input.name);
     return new Promise((resolve, reject) => {
-      this.client.lease_workflow(request, (err, response) => {
+      this.client.workflow_start(request, (err, response) => {
         if (err) {
           reject(handleError(err));
           return;
         }
         resolve({
-          checkpoints: Object.fromEntries(response.getCheckpointsMap().entries()),
-          fencing_token: response.getFencingToken(),
+          fencingToken: response.getFencingToken(),
         });
       });
     });
@@ -84,12 +79,11 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
 
   async checkpoint(input: CheckpointInput): Promise<CheckpointOutput> {
     const request = new CheckPointRequest();
-    request.setWorkflowId(input.workflow_id);
-    request.setValue(input.value);
-    request.setFencingToken(input.fencing_token);
-    request.setWorkflowContextName(input.workflow_context_name);
-    request.setCheckpointContextName(input.checkpoint_context_name);
-    request.setPositionChecksum(input.position_checksum);
+    request.setWorkflowId(input.workflowId);
+    request.setValue(input.value as string);
+    request.setFencingToken(input.fencingToken);
+    request.setPositionChecksum(input.positionChecksum);
+    request.setIdempotencyChecksum(input.idempotencyChecksum);
     return new Promise((resolve, reject) => {
       this.client.checkpoint(request, (err, response) => {
         if (err) {
@@ -105,10 +99,11 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
 
   async leaseCheckpoint(input: LeaseCheckpointInput): Promise<LeaseCheckpointOutput> {
     const request = new LeaseCheckpointRequest();
-    request.setWorkflowId(input.workflow_id);
-    request.setFencingToken(input.fencing_token);
-    request.setLeaseTimeout(input.lease_timeout);
-    request.setPositionChecksum(input.position_checksum);
+    request.setWorkflowId(input.workflowId);
+    request.setFencingToken(input.fencingToken);
+    request.setLeaseTimeout(input.leaseTimeout);
+    request.setPositionChecksum(input.positionChecksum);
+    request.setIdempotencyChecksum(input.idempotencyChecksum);
     return new Promise((resolve, reject) => {
       this.client.lease_checkpoint(request, (err, response) => {
         if (err) {
@@ -124,11 +119,47 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
 
   async completeWorkflow(input: CompleteWorkflowInput): Promise<CompleteWorkflowOutput> {
     const request = new CompleteWorkflowRequest();
-    request.setWorkflowId(input.workflow_id);
-    request.setFencingToken(input.fencing_token);
-    request.setExpireAfter(input.expire_after);
+    request.setWorkflowId(input.workflowId);
+    request.setFencingToken(input.fencingToken);
+    request.setExpireAfter(input.expireAfter);
     return new Promise((resolve, reject) => {
       this.client.complete_workflow(request, (err, response) => {
+        if (err) {
+          reject(handleError(err));
+          return;
+        }
+        resolve({});
+      });
+    });
+  }
+
+  async getWorkflowStatus(input: WorkflowStatusInput): Promise<WorkflowStatusOutput> {
+    const request = new WorkflowStatusRequest();
+    request.setWorkflowId(input.workflowId);
+    return new Promise((resolve, reject) => {
+      this.client.workflow_status(request, (err, response) => {
+        if (err) {
+          reject(handleError(err));
+          return;
+        }
+        resolve({
+          id: response.getWorkflowId(),
+          status: response.getStatus(),
+          expireAt: response.getExpireAt(),
+          completedAt: response.getCompletedAt(),
+        });
+      });
+    });
+  }
+
+  async releaseLeaseCheckpoint(
+    input: ReleaseLeaseCheckpointInput
+  ): Promise<ReleaseLeaseCheckpointOutput> {
+    const request = new ReleaseCheckpointRequest();
+    request.setWorkflowId(input.workflowId);
+    request.setPositionChecksum(input.positionChecksum);
+    return new Promise((resolve, reject) => {
+      this.client.release_checkpoint(request, (err, response) => {
         if (err) {
           reject(handleError(err));
           return;

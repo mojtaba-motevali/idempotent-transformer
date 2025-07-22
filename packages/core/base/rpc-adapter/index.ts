@@ -5,9 +5,15 @@ import {
   CompleteWorkflowOutput,
   LeaseCheckpointInput,
   LeaseCheckpointOutput,
-  LeaseWorkflowInput,
-  LeaseWorkflowOutput,
+  StartWorkflowInput,
+  StartWorkflowOutput,
+  WorkflowStatusInput,
+  WorkflowStatusOutput,
 } from './interfaces';
+import {
+  ReleaseLeaseCheckpointInput,
+  ReleaseLeaseCheckpointOutput,
+} from './interfaces/release-leas-checkpoint.interface';
 
 export interface IdempotentRpcAdapter {
   /**
@@ -15,7 +21,7 @@ export interface IdempotentRpcAdapter {
    * @param input - The input for the lease workflow RPC.
    * @returns The output of the lease workflow RPC.
    */
-  leaseWorkflow(input: LeaseWorkflowInput): Promise<LeaseWorkflowOutput>;
+  startWorkflow(input: StartWorkflowInput): Promise<StartWorkflowOutput>;
   /**
    * Creates a checkpoint.
    * @param input - The input for the checkpoint RPC.
@@ -34,7 +40,21 @@ export interface IdempotentRpcAdapter {
    * @returns The output of the complete workflow RPC.
    */
   completeWorkflow(input: CompleteWorkflowInput): Promise<CompleteWorkflowOutput>;
+
+  /**
+   * Finds a workflow.
+   * @param input - The input for the find workflow RPC.
+   * @returns The output of the find workflow RPC.
+   */
+  getWorkflowStatus(input: WorkflowStatusInput): Promise<WorkflowStatusOutput>;
+
+  /**
+   * Releases a leased checkpoint.
+   * @param input - The input for the release leased checkpoint RPC.
+   * @returns The output of the release leased checkpoint RPC.
+   */
+  releaseLeaseCheckpoint(input: ReleaseLeaseCheckpointInput): Promise<ReleaseLeaseCheckpointOutput>;
 }
 
 export * from './interfaces';
-export * from './exceptions';
+export * from './err-codes';

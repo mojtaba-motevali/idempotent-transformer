@@ -1,12 +1,11 @@
 import { TSerialized } from '../../types/serialized.type';
 
 export interface CheckpointInput {
-  workflow_id: string;
+  workflowId: string;
   value: TSerialized;
-  fencing_token: number;
-  position_checksum: number;
-  workflow_context_name: string;
-  checkpoint_context_name: string;
+  fencingToken: number;
+  positionChecksum: number;
+  idempotencyChecksum: number;
 }
 
 export interface CheckpointOutput {

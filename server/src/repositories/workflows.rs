@@ -24,7 +24,21 @@ pub async fn create_or_get_workflow(
         status: result.get::<i64>("status"),
         created_at: result.get::<i64>("created_at"),
         expire_at: result.get::<Option<i64>>("expire_at"),
+        completed_at: result.get::<Option<i64>>("completed_at"),
     })
+}
+
+pub async fn get_workflow(
+    client: &Client,
+    workflow_id: &str,
+) -> Result<Option<Workflow>, Box<dyn Error + Send + Sync>> {
+    let result = client
+        .query_as_optional::<Workflow, _>(
+            "SELECT * FROM Workflows WHERE id = $1",
+            params![workflow_id],
+        )
+        .await?;
+    Ok(result)
 }
 
 pub async fn delete_expired_workflows(client: &Client) -> Result<(), Box<dyn Error + Send + Sync>> {
