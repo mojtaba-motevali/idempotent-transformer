@@ -1,11 +1,11 @@
 config:
-  target: "unused"  # required but not used
-  processor: "./parallel-different-workflow.js"
-  output: "./results/performance-data.json"
+  target: 'unused' # required but not used
+  processor: './parallel-different-workflow.js'
+  output: './results/performance-data.json'
   phases:
-    - arrivalRate: 100
+    - arrivalRate: 1500
       duration: 60
 scenarios:
-  - name: "Run SDK Workflow"
+  - name: 'Run SDK Workflow'
     flow:
-      - function: "runWorkflow"
+      - function: 'runWorkflow'

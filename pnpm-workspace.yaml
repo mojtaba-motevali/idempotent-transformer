@@ -1,2 +1,8 @@
 packages:
-  - 'packages/*'
+  - packages/*
+
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - grpc-tools
+  - msgpackr-extract
+  - protobufjs
