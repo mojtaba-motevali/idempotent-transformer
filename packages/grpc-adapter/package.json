@@ -9,9 +9,8 @@
   ],
   "license": "MIT",
   "scripts": {
-    "generate": "./generate.sh",
     "build": "tsc",
-    "prepare": "ts-node move-proto.ts && pnpm generate"
+    "generate": "ts-node move-proto.ts && ./generate.sh"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4",
