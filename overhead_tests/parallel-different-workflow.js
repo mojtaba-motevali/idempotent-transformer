@@ -68,19 +68,19 @@ module.exports = {
       rpcAdapter,
       serializer: messagePack,
       checksumGenerator: new CheckSumGenerator(),
-      log: null
+      log: null,
     });
     try {
       const runner = await transformer.startWorkflow(context._uid, {
-        contextName: context,
-        retentionTime: 10000,
+        workflowName: 'test',
+        completedRetentionTime: 10000,
       });
 
       await runner.execute('task1', task1);
-      await runner.execute('task2', task2);
-      await runner.execute('task3', task3);
-      await runner.execute('task4', task4);
-      await runner.execute('task5', task5);
+      // await runner.execute('task2', task2);
+      // await runner.execute('task3', task3);
+      // await runner.execute('task4', task4);
+      // await runner.execute('task5', task5);
 
       await runner.complete();
       events.emit('counter', 'workflows.success', 1);

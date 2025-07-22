@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(EnvFilter::from("info"))
         .init();
 
-    let client = get_client(server_node, data_dir, nodes)
+    let client = get_client(server_node.clone(), data_dir, nodes)
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error>)?;
     init_tables(&client)
@@ -79,11 +79,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a channel for graceful shutdown
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
-    // Start the cleanup workflow scheduler
-    if let Err(e) = clean_up_expired_workflows(&client).await {
-        error!("Error during clean up workflows: {}", e);
-        graceful_shutdown(&client).await?;
-        return Err(e);
+    if server_node.id == 1 {
+        // Start the cleanup workflow scheduler
+        if let Err(e) = clean_up_expired_workflows(&client).await {
+            error!("Error during clean up workflows: {}", e);
+            graceful_shutdown(&client).await?;
+            return Err(e);
+        }
     }
 
     let client_clone = client.clone();
