@@ -72,19 +72,19 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /dev/shm/data/node_1.local
+      device: /dev/shm/data/node_1
   data2:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /dev/shm/data/node_2.local
+      device: /dev/shm/data/node_2
   data3:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /dev/shm/data/node_3.local
+      device: /dev/shm/data/node_3
 
 networks:
   cluster_net:

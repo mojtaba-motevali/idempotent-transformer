@@ -132,12 +132,15 @@ pub async fn handle_lease_checkpoint(
         }
     };
     // At least 40 milliseconds is required for lock being held, otherwise thread panics under high load.
-    tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    // tokio::time::sleep(std::time::Duration::from_millis(40)).await;
 
     let sent_fencing_token = data.fencing_token;
-
-    let leased_checkpoint_result =
-        get_leased_checkpoint(client, &data.workflow_id, data.position_checksum).await?;
+    let (leased_checkpoint_result, workflow_fencing_token) = tokio::join!(
+        get_leased_checkpoint(client, &data.workflow_id, data.position_checksum),
+        get_workflow_fencing_token(client, &data.workflow_id),
+    );
+    let leased_checkpoint_result = leased_checkpoint_result?;
+    let workflow_fencing_token = workflow_fencing_token?;
     if let Some(leased_checkpoint) = leased_checkpoint_result {
         return_error_if_true(
             has_expired(&leased_checkpoint),
@@ -148,13 +151,7 @@ pub async fn handle_lease_checkpoint(
         )?;
     }
     // Lease checkpoint is only allowed if the workflow has a fencing token
-    let found_fencing_token = match get_workflow_fencing_token(client, &data.workflow_id).await {
-        Ok(token) => token,
-        Err(err) => {
-            drop(lock);
-            return Err(Box::new(std::io::Error::other(err.to_string())));
-        }
-    };
+    let found_fencing_token = workflow_fencing_token;
 
     return_error_if_true(
         found_fencing_token.is_none(),
@@ -185,6 +182,7 @@ pub async fn handle_lease_checkpoint(
         .await?;
         return Ok(LeaseCheckpointOutput { response: None });
     }
+    drop(lock);
     Err(Box::new(std::io::Error::other("unexpected state")))
 }
 

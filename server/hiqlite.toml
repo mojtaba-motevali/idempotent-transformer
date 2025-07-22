@@ -23,9 +23,9 @@ node_id = 1
 # default: ["1 localhost:8100 localhost:8200"]
 # overwritten by: HQL_NODES
 nodes = [
-    "1 localhost:8100 localhost:8200",
-    "2 localhost:8101 localhost:8201",
-    "3 localhost:8102 localhost:8202",
+    "1 node1:8100 node1:8200",
+    "2 node2:8101 node2:8201",
+    "3 node3:8102 node3:8202",
 ]
 
 # You can set the listen addresses for both the API and Raft servers.
@@ -124,7 +124,7 @@ read_pool_size = 4
 #
 # default: immediate_async
 # overwritten by: HQL_LOG_SYNC
-log_sync = "immediate"
+log_sync = "immediate_async"
 
 # Hiqlite WAL files (when not using the `rocksdb` feature) will
 # always have a fixed size, even when they are still "empty", to
@@ -134,7 +134,7 @@ log_sync = "immediate"
 #
 # default: 2097152
 # overwritten by: HQL_WAL_SIZE
-wal_size = 2097152
+wal_size = 1048576
 
 # Set to `false` to store Cache WAL files + Snapshots in-memory only.
 # If you run a Cluster, a Node can re-sync cache data after a restart.
@@ -156,7 +156,7 @@ cache_storage_disk = true
 #
 # default: 10000
 # overwritten by: HQL_LOGS_UNTIL_SNAPSHOT
-logs_until_snapshot = 10000
+logs_until_snapshot = 50000
 
 # The artificial shutdown delay to add in multi-node environments.
 # This value is being added before finally shutting down a node
