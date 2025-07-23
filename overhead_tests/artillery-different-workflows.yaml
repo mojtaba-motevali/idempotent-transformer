@@ -3,18 +3,14 @@ config:
   processor: './parallel-different-workflow.js'
   phases:
     - name: 'Warm-up'
-      arrivalRate: 50
-      duration: 10
-    - name: 'Ramp-up'
-      arrivalRate: 200
-      duration: 20
-      rampTo: 500
-    - name: 'Sustained Load'
-      arrivalRate: 500
-      duration: 30
-    - name: 'Peak Test'
-      arrivalRate: 750
-      duration: 15
+      arrivalRate: 549
+      duration: 60
+      # maxVusers: 1500 # Maximum concurrent virtual users
+    # - pause: 2 # 5-second pause phase
+    # - name: 'Run'
+    #   arrivalRate: 3000
+    #   duration: 1
+    #   maxVusers: 2000  # Higher concurrency for peak load
 scenarios:
   - name: 'Run SDK Workflow'
     flow:

@@ -22,8 +22,22 @@ pub async fn increment_workflow_fencing_token(
     initial_fencing_token: i64,
 ) -> Result<i64, Box<dyn Error + Send + Sync>> {
     let mut result = client.execute_returning_one(
-        "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token) VALUES ($1, $2) ON CONFLICT (workflow_id) DO UPDATE SET fencing_token = fencing_token + 1 RETURNING fencing_token",
+        "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token) VALUES ($1, $2) RETURNING fencing_token",
         params![workflow_id, initial_fencing_token],
     ).await?;
     Ok(result.get::<i64>("fencing_token"))
+}
+
+pub async fn delete_expired_workflow_fencing_tokens(
+    client: &Client,
+    current_timestamp: i64,
+    status: i8,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    client
+        .execute(
+            "DELETE FROM WorkflowFencingTokens WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
+            params![current_timestamp, status ],
+        )
+        .await?;
+    Ok(())
 }

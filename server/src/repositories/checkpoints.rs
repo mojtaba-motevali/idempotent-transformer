@@ -35,3 +35,17 @@ pub async fn create_checkpoint(
         .await?;
     Ok(())
 }
+
+pub async fn delete_expired_checkpoints(
+    client: &Client,
+    current_timestamp: i64,
+    status: i8,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    client
+        .execute(
+            "DELETE FROM Checkpoints WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
+            params![current_timestamp, status ],
+        )
+        .await?;
+    Ok(())
+}
