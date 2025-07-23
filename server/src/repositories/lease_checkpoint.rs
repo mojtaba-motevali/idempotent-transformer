@@ -63,3 +63,17 @@ pub async fn get_leased_checkpoint(
         .await?;
     Ok(leased_checkpoint)
 }
+
+pub async fn delete_expired_leased_checkpoints(
+    client: &Client,
+    current_timestamp: i64,
+    status: i8,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    client
+        .execute(
+            "DELETE FROM CheckpointLeases WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
+            params![current_timestamp, status ],
+        )
+        .await?;
+    Ok(())
+}

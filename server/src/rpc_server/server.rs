@@ -13,8 +13,8 @@ use crate::rpc_server::server::workflow_service::{
     WorkflowStartResponse, WorkflowStatusRequest, WorkflowStatusResponse,
 };
 use crate::services::checkpoint_service::{
-    CheckpointInput, LeaseCheckpointInput, handle_checkpoint, handle_lease_checkpoint,
-    release_checkpoint,
+    CheckpointInput, LeaseCheckpointInput, LeaseCheckpointReturnType, handle_checkpoint,
+    handle_lease_checkpoint, release_checkpoint,
 };
 use crate::services::workflow_service::{
     CreateWorkflowInput, FinishWorkflowInput, create_workflow, finish_workflow,
@@ -22,8 +22,9 @@ use crate::services::workflow_service::{
 
 use workflow_service::{
     CheckPointRequest, CheckPointResponse, CompleteWorkflowRequest, CompleteWorkflowResponse,
-    LeaseCheckpointRequest, LeaseCheckpointResponse, lease_checkpoint_response::Response::Value,
-    workflow_service_impl_server::WorkflowServiceImpl,
+    LeaseCheckpointRequest, LeaseCheckpointResponse,
+    lease_checkpoint_response::Response::RemainingLeaseTimeout,
+    lease_checkpoint_response::Response::Value, workflow_service_impl_server::WorkflowServiceImpl,
     workflow_service_impl_server::WorkflowServiceImplServer,
 };
 
@@ -94,7 +95,12 @@ impl WorkflowServiceImpl for WorkflowService {
             .await,
         )?;
         Ok(Response::new(LeaseCheckpointResponse {
-            response: result.response.map(Value),
+            response: result.response.map(|r| match r {
+                LeaseCheckpointReturnType::CheckpointValue(value) => Value(value),
+                LeaseCheckpointReturnType::RemainingLeaseTimeout(remaining_lease_timeout) => {
+                    RemainingLeaseTimeout(remaining_lease_timeout)
+                }
+            }),
         }))
     }
 

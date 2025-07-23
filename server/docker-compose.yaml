@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   node1:
     image: idempotency-server:latest # build or pull this image beforehand

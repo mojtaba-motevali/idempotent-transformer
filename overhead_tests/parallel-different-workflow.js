@@ -4,21 +4,8 @@ const MessagePack = require('@idempotent-transformer/message-pack-adapter').Mess
 const CheckSumGenerator = require('@idempotent-transformer/checksum-adapter').CheckSumGenerator;
 const { faker } = require('@faker-js/faker');
 
-const appendFile = require('fs').appendFile;
 const messagePack = MessagePack.getInstance();
 
-// Track task execution counts
-const fileName = 'test.txt';
-
-const appendFileAsync = async (fileName, content) =>
-  new Promise((resolve, reject) => {
-    appendFile(fileName, content, (err) => {
-      if (err) {
-        reject(err);
-      }
-      resolve();
-    });
-  });
 
 const getData = () =>  {
   const testData = {
@@ -89,37 +76,30 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Task definitions - same as your experiment
 const task1 = async () => {
-  const now = Date.now();
-
-  // await wait(300);
   return getData();
 };
 
 const task2 = async () => {
-  const now = Date.now();
-  // await wait(300);
   return getData();
 };
 
 const task3 = async () => {
-  const now = Date.now();
-  // await wait(300);
   return getData();
 };
 
 const task4 = async () => {
-  const now = Date.now();
-  // await wait(300);
   return getData();
 };
 
 const task5 = async () => {
-  const now = Date.now();
-  // await wait(300);
   return getData();
 };
 
-const TOTAL_CLUSTER_NODES = 3;
+const task6 = async () => {
+  return getData();
+};
+
+const TOTAL_CLUSTER_NODES = 1;
 // round-robin port selection to balance load across nodes
 const BASE_PORT = 51000;
 const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
@@ -142,9 +122,8 @@ module.exports = {
       checksumGenerator: new CheckSumGenerator(),
       log: null,
     });
-    const runner = await transformer.startWorkflow(context._uid, {
-      workflowName: 'test',
-      completedRetentionTime: 10000,
+    const runner = await transformer.startWorkflow(context.vars.$uuid, {
+      workflowName: context.vars.$uuid,
     });
     try {
         await runner.execute('task1', task1);
@@ -152,8 +131,11 @@ module.exports = {
         await runner.execute('task3', task3);
         await runner.execute('task4', task4);
         await runner.execute('task5', task5);
+        await runner.execute('task6', task6);
+
         await runner.complete();
       events.emit('counter', 'workflows.success', 1);
+
     } catch (err) {
       await runner.complete();
 

@@ -112,6 +112,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
         }
         resolve({
           value: response.getValue() as Buffer,
+          remainingLeaseTimeout: response.getRemainingLeaseTimeout(),
         });
       });
     });

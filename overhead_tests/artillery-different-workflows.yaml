@@ -2,19 +2,14 @@ config:
   target: 'unused' # required but not used
   processor: './parallel-different-workflow.js'
   phases:
-    - name: 'Warm-up'
-      arrivalRate: 50
-      duration: 10
-    - name: 'Ramp-up'
-      arrivalRate: 200
-      duration: 20
-      rampTo: 500
-    - name: 'Sustained Load'
+    - name: 'Phase 1'
       arrivalRate: 500
       duration: 30
-    - name: 'Peak Test'
-      arrivalRate: 750
-      duration: 15
+    # - pause: 2 # 5-second   pause phase
+    # - name: 'Run'
+    #   arrivalRate: 3000
+    #   duration: 1
+    #   maxVusers: 2000  # Higher concurrency for peak load
 scenarios:
   - name: 'Run SDK Workflow'
     flow:

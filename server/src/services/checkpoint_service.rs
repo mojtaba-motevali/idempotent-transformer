@@ -23,12 +23,15 @@ pub struct CheckpointOutput {
     pub abort: bool,
 }
 
-fn has_expired(leased_checkpoint: &LeasedCheckpointValue) -> bool {
+///
+/// Returns the remaining lease timeout in milliseconds.
+fn diff_lease_expiry_from_now(leased_checkpoint: &LeasedCheckpointValue) -> i64 {
     let now = chrono::Utc::now().timestamp_millis();
-    let expires_at = leased_checkpoint
+    let remaining_lease_timeout = leased_checkpoint
         .created_at
-        .saturating_add(leased_checkpoint.lease_timeout);
-    now <= expires_at
+        .saturating_add(leased_checkpoint.lease_timeout)
+        .saturating_sub(now);
+    remaining_lease_timeout
 }
 
 pub async fn handle_checkpoint(
@@ -56,7 +59,7 @@ pub async fn handle_checkpoint(
 
     // Reject the result if the lease timeout is expired for the worker lease used to belong to.
     // if lease timeout is expired, then we need to check if the fencing token is expired
-    if !has_expired(&leased_checkpoint) {
+    if diff_lease_expiry_from_now(&leased_checkpoint) <= 0 {
         return_error_if_true(
             is_fencing_token_expired,
             Box::new(std::io::Error::new(
@@ -89,8 +92,13 @@ pub struct LeaseCheckpointInput {
     pub idempotency_checksum: i64,
 }
 
+pub enum LeaseCheckpointReturnType {
+    CheckpointValue(Vec<u8>),
+    RemainingLeaseTimeout(i64),
+}
+
 pub struct LeaseCheckpointOutput {
-    pub response: Option<Vec<u8>>,
+    pub response: Option<LeaseCheckpointReturnType>,
 }
 
 pub async fn handle_lease_checkpoint(
@@ -118,19 +126,10 @@ pub async fn handle_lease_checkpoint(
             )),
         )?;
         return Ok(LeaseCheckpointOutput {
-            response: Some(checkpoint.value),
+            response: Some(LeaseCheckpointReturnType::CheckpointValue(checkpoint.value)),
         });
     }
 
-    let lock_key = data.workflow_id.clone() + "_" + &data.position_checksum.to_string();
-    // lock will automatically be released when the lock is dropped
-    let lock = match client.lock(lock_key).await {
-        Ok(lock) => lock,
-        Err(err) => {
-            println!("Lock acquisition failed: {err}");
-            return Err(Box::new(std::io::Error::other(err.to_string())));
-        }
-    };
     // At least 40 milliseconds is required for lock being held, otherwise thread panics under high load.
     // tokio::time::sleep(std::time::Duration::from_millis(40)).await;
 
@@ -139,19 +138,18 @@ pub async fn handle_lease_checkpoint(
         get_leased_checkpoint(client, &data.workflow_id, data.position_checksum),
         get_workflow_fencing_token(client, &data.workflow_id),
     );
-    let leased_checkpoint_result = leased_checkpoint_result?;
-    let workflow_fencing_token = workflow_fencing_token?;
-    if let Some(leased_checkpoint) = leased_checkpoint_result {
-        return_error_if_true(
-            has_expired(&leased_checkpoint),
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "checkpoint_leased_by_other_worker",
-            )),
-        )?;
+    let leased_checkpoint_option = leased_checkpoint_result?;
+    let found_fencing_token = workflow_fencing_token?;
+    if let Some(leased_checkpoint) = leased_checkpoint_option {
+        let remaining_time = diff_lease_expiry_from_now(&leased_checkpoint);
+        if remaining_time > 0 {
+            return Ok(LeaseCheckpointOutput {
+                response: Some(LeaseCheckpointReturnType::RemainingLeaseTimeout(
+                    remaining_time,
+                )),
+            });
+        }
     }
-    // Lease checkpoint is only allowed if the workflow has a fencing token
-    let found_fencing_token = workflow_fencing_token;
 
     return_error_if_true(
         found_fencing_token.is_none(),
@@ -182,7 +180,6 @@ pub async fn handle_lease_checkpoint(
         .await?;
         return Ok(LeaseCheckpointOutput { response: None });
     }
-    drop(lock);
     Err(Box::new(std::io::Error::other("unexpected state")))
 }
 

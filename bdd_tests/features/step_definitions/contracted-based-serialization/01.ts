@@ -110,10 +110,10 @@ Given(
 When('the task is executed twice to showcase a retry operation', async function () {
   firstResult = await runner.execute('user-defined-class', userDefinedClassTask);
   // retry the workflow
-  runner = await transformer.startWorkflow(workflowId, {
+  const newRunner = await transformer.startWorkflow(workflowId, {
     workflowName: 'user-defined-class',
   });
-  secondResult = await runner.execute('user-defined-class', userDefinedClassTask);
+  secondResult = await newRunner.execute('user-defined-class', userDefinedClassTask);
   await runner.complete();
 });
 

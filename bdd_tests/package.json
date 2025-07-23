@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@idempotent-transformer/checksum-adapter": "0.1.3",
-    "@idempotent-transformer/core": "0.1.40",
+    "@idempotent-transformer/core": "0.1.41",
     "@idempotent-transformer/message-pack-adapter": "0.1.4",
-    "@idempotent-transformer/grpc-adapter": "0.1.13"
+    "@idempotent-transformer/grpc-adapter": "0.1.14"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

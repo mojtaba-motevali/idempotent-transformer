@@ -109,8 +109,8 @@ importers:
         specifier: ^1.13.4
         version: 1.13.4
       '@idempotent-transformer/core':
-        specifier: 0.1.40
-        version: 0.1.40
+        specifier: 0.1.41
+        version: 0.1.41
     devDependencies:
       grpc-tools:
         specifier: ^1.13.0
@@ -506,8 +506,8 @@ packages:
   '@idempotent-transformer/core@0.1.26':
     resolution: {integrity: sha512-3ph/ZNhsHAtakESOp+NR2nmbf9Rl4RgnURWVnZ2047vPV7C8i+yUEcZu+VDDxznaHZ1VKNvGE88qrg0DKom5rg==}
 
-  '@idempotent-transformer/core@0.1.40':
-    resolution: {integrity: sha512-W+OgFgDHxOe6Z+OifEY7/u4MfYYY7j7hgQPFLxe/lGlaosC/n+aunC8Fn60TN9nFsWypgruFx/DqOKnMLBf58Q==}
+  '@idempotent-transformer/core@0.1.41':
+    resolution: {integrity: sha512-VP14sGjfHa44kJag+Fk9p+pzHEqpVAEEoZ3Iomaf8i7EDwxj/EXAclGBl+lpsNeD1yiV7D1xK82VPic0n7XzNQ==}
 
   '@ioredis/commands@1.2.0':
     resolution: {integrity: sha512-Sx1pU8EM64o2BrqNpEO1CNLtKQwyhuXuqyfH7oGKCk+1a33d2r5saW8zNwm3j6BTExtjrv2BxTgzzkMwts6vGg==}
@@ -3045,7 +3045,7 @@ snapshots:
 
   '@idempotent-transformer/core@0.1.26': {}
 
-  '@idempotent-transformer/core@0.1.40': {}
+  '@idempotent-transformer/core@0.1.41': {}
 
   '@ioredis/commands@1.2.0': {}
 

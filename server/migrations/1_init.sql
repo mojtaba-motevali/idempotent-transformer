@@ -6,17 +6,13 @@ CREATE TABLE IF NOT EXISTS Workflows (
     created_at TIMESTAMP NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_workflows_id ON Workflows (id);
-
 CREATE TABLE IF NOT EXISTS WorkflowFencingTokens (
-    workflow_id VARCHAR(255) NOT NULL REFERENCES Workflows (id) ON DELETE CASCADE,
+    workflow_id VARCHAR(255) NOT NULL PRIMARY KEY,
     fencing_token INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_fencing_tokens_workflow_id ON WorkflowFencingTokens (workflow_id);
-
 CREATE TABLE IF NOT EXISTS Checkpoints (
-    workflow_id VARCHAR(255) NOT NULL REFERENCES Workflows (id) ON DELETE CASCADE,
+    workflow_id VARCHAR(255) NOT NULL,
     position_checksum INTEGER NOT NULL,
     value BYTEA,
     idempotency_checksum INTEGER NOT NULL,
@@ -29,7 +25,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoints_workflow_id_position ON Checkp
 );
 
 CREATE TABLE IF NOT EXISTS CheckpointLeases (
-    workflow_id VARCHAR(255) NOT NULL REFERENCES Workflows (id) ON DELETE CASCADE,
+    workflow_id VARCHAR(255) NOT NULL,
     position_checksum INTEGER NOT NULL,
     lease_timeout INTEGER NOT NULL,
     created_at TIMESTAMP NOT NULL

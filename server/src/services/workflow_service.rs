@@ -4,9 +4,12 @@ use hiqlite_macros::params;
 use std::error::Error;
 
 use crate::helpers::common::return_error_if_true;
-use crate::repositories::workflows::create_or_get_workflow;
+use crate::repositories::checkpoints::delete_expired_checkpoints;
+use crate::repositories::lease_checkpoint::delete_expired_leased_checkpoints;
+use crate::repositories::workflows::{create_or_get_workflow, delete_expired_workflows};
 use crate::repositories::workflows_fencing_tokens::{
-    get_workflow_fencing_token, increment_workflow_fencing_token,
+    delete_expired_workflow_fencing_tokens, get_workflow_fencing_token,
+    increment_workflow_fencing_token,
 };
 use crate::schema::workflow::WorkflowStatus;
 
@@ -22,11 +25,14 @@ pub async fn create_workflow(
     client: &Client,
     data: CreateWorkflowInput,
 ) -> Result<CreateWorkflowOutput, Box<dyn Error + Send + Sync>> {
-    let workflow_id_result =
-        create_or_get_workflow(client, &data.workflow_id, WorkflowStatus::Running).await?;
-    let fencing_token = increment_workflow_fencing_token(client, &workflow_id_result.id, 1).await?;
+    let (_, fencing_token) = tokio::join!(
+        create_or_get_workflow(client, &data.workflow_id, WorkflowStatus::Running),
+        increment_workflow_fencing_token(client, &data.workflow_id, 1),
+    );
 
-    Ok(CreateWorkflowOutput { fencing_token })
+    Ok(CreateWorkflowOutput {
+        fencing_token: fencing_token?,
+    })
 }
 
 pub struct FinishWorkflowInput {
@@ -71,4 +77,19 @@ pub async fn finish_workflow(
         .await?;
 
     Ok(FinishWorkflowOutput {})
+}
+
+pub async fn handle_workflow_cleanup(client: &Client) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let current_timestamp = Utc::now().timestamp_millis();
+    let status = WorkflowStatus::Completed as i8;
+    let (fencing_tokens, leased_checkpoints, checkpoints) = tokio::join!(
+        delete_expired_workflow_fencing_tokens(client, current_timestamp, status),
+        delete_expired_leased_checkpoints(client, current_timestamp, status),
+        delete_expired_checkpoints(client, current_timestamp, status),
+    );
+    fencing_tokens?;
+    leased_checkpoints?;
+    checkpoints?;
+    delete_expired_workflows(client, current_timestamp, status).await?;
+    Ok(())
 }

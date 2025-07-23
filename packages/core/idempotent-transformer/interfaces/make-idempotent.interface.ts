@@ -10,7 +10,7 @@ export type IdempotentRunnerResult = {
   execute: <R>(
     idempotencyKey: string,
     task: (() => Promise<R>) | (() => R),
-    options?: IIdempotentTaskOptions
+    options?: IIdempotentTaskOptions<R>
   ) => Promise<R>;
   getWorkflowStatus: (args: WorkflowStatusInput) => Promise<WorkflowStatusOutput>;
 };
