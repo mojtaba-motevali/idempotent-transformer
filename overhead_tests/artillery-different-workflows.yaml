@@ -2,11 +2,10 @@ config:
   target: 'unused' # required but not used
   processor: './parallel-different-workflow.js'
   phases:
-    - name: 'Warm-up'
-      arrivalRate: 549
-      duration: 60
-      # maxVusers: 1500 # Maximum concurrent virtual users
-    # - pause: 2 # 5-second pause phase
+    - name: 'Phase 1'
+      arrivalRate: 500
+      duration: 30
+    # - pause: 2 # 5-second   pause phase
     # - name: 'Run'
     #   arrivalRate: 3000
     #   duration: 1

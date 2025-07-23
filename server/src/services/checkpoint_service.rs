@@ -23,12 +23,15 @@ pub struct CheckpointOutput {
     pub abort: bool,
 }
 
-fn has_expired(leased_checkpoint: &LeasedCheckpointValue) -> bool {
+///
+/// Returns the remaining lease timeout in milliseconds.
+fn diff_lease_expiry_from_now(leased_checkpoint: &LeasedCheckpointValue) -> i64 {
     let now = chrono::Utc::now().timestamp_millis();
-    let expires_at = leased_checkpoint
+    let remaining_lease_timeout = leased_checkpoint
         .created_at
-        .saturating_add(leased_checkpoint.lease_timeout);
-    now <= expires_at
+        .saturating_add(leased_checkpoint.lease_timeout)
+        .saturating_sub(now);
+    remaining_lease_timeout
 }
 
 pub async fn handle_checkpoint(
@@ -56,7 +59,7 @@ pub async fn handle_checkpoint(
 
     // Reject the result if the lease timeout is expired for the worker lease used to belong to.
     // if lease timeout is expired, then we need to check if the fencing token is expired
-    if !has_expired(&leased_checkpoint) {
+    if diff_lease_expiry_from_now(&leased_checkpoint) <= 0 {
         return_error_if_true(
             is_fencing_token_expired,
             Box::new(std::io::Error::new(
@@ -89,8 +92,13 @@ pub struct LeaseCheckpointInput {
     pub idempotency_checksum: i64,
 }
 
+pub enum LeaseCheckpointReturnType {
+    CheckpointValue(Vec<u8>),
+    RemainingLeaseTimeout(i64),
+}
+
 pub struct LeaseCheckpointOutput {
-    pub response: Option<Vec<u8>>,
+    pub response: Option<LeaseCheckpointReturnType>,
 }
 
 pub async fn handle_lease_checkpoint(
@@ -118,7 +126,7 @@ pub async fn handle_lease_checkpoint(
             )),
         )?;
         return Ok(LeaseCheckpointOutput {
-            response: Some(checkpoint.value),
+            response: Some(LeaseCheckpointReturnType::CheckpointValue(checkpoint.value)),
         });
     }
 
@@ -133,13 +141,14 @@ pub async fn handle_lease_checkpoint(
     let leased_checkpoint_option = leased_checkpoint_result?;
     let found_fencing_token = workflow_fencing_token?;
     if let Some(leased_checkpoint) = leased_checkpoint_option {
-        return_error_if_true(
-            has_expired(&leased_checkpoint),
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "checkpoint_leased_by_other_worker",
-            )),
-        )?;
+        let remaining_time = diff_lease_expiry_from_now(&leased_checkpoint);
+        if remaining_time > 0 {
+            return Ok(LeaseCheckpointOutput {
+                response: Some(LeaseCheckpointReturnType::RemainingLeaseTimeout(
+                    remaining_time,
+                )),
+            });
+        }
     }
 
     return_error_if_true(

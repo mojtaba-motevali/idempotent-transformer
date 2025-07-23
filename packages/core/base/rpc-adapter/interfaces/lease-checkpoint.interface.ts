@@ -8,4 +8,5 @@ export interface LeaseCheckpointInput {
 
 export interface LeaseCheckpointOutput {
   value?: Buffer;
+  remainingLeaseTimeout?: number;
 }

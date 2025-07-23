@@ -73,6 +73,7 @@ message LeaseCheckpointRequest {
 message LeaseCheckpointResponse {
     oneof response {
         bytes value = 1;
+        int64 remaining_lease_timeout = 2;
     }
 }
 

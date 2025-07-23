@@ -95,7 +95,11 @@ const task5 = async () => {
   return getData();
 };
 
-const TOTAL_CLUSTER_NODES = 3;
+const task6 = async () => {
+  return getData();
+};
+
+const TOTAL_CLUSTER_NODES = 1;
 // round-robin port selection to balance load across nodes
 const BASE_PORT = 51000;
 const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
@@ -120,14 +124,15 @@ module.exports = {
     });
     const runner = await transformer.startWorkflow(context.vars.$uuid, {
       workflowName: context.vars.$uuid,
-      completedRetentionTime: 10000,
     });
     try {
         await runner.execute('task1', task1);
         await runner.execute('task2', task2);
         await runner.execute('task3', task3);
-        // await runner.execute('task4', task4);
-        // await runner.execute('task5', task5);
+        await runner.execute('task4', task4);
+        await runner.execute('task5', task5);
+        await runner.execute('task6', task6);
+
         await runner.complete();
       events.emit('counter', 'workflows.success', 1);
 

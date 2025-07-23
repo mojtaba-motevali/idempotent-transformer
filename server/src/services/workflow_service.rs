@@ -27,7 +27,7 @@ pub async fn create_workflow(
 ) -> Result<CreateWorkflowOutput, Box<dyn Error + Send + Sync>> {
     let (_, fencing_token) = tokio::join!(
         create_or_get_workflow(client, &data.workflow_id, WorkflowStatus::Running),
-        increment_workflow_fencing_token(client, &data.workflow_id, Utc::now().timestamp_millis()),
+        increment_workflow_fencing_token(client, &data.workflow_id, 1),
     );
 
     Ok(CreateWorkflowOutput {
@@ -82,11 +82,14 @@ pub async fn finish_workflow(
 pub async fn handle_workflow_cleanup(client: &Client) -> Result<(), Box<dyn Error + Send + Sync>> {
     let current_timestamp = Utc::now().timestamp_millis();
     let status = WorkflowStatus::Completed as i8;
-    tokio::join!(
+    let (fencing_tokens, leased_checkpoints, checkpoints) = tokio::join!(
         delete_expired_workflow_fencing_tokens(client, current_timestamp, status),
         delete_expired_leased_checkpoints(client, current_timestamp, status),
         delete_expired_checkpoints(client, current_timestamp, status),
     );
+    fencing_tokens?;
+    leased_checkpoints?;
+    checkpoints?;
     delete_expired_workflows(client, current_timestamp, status).await?;
     Ok(())
 }

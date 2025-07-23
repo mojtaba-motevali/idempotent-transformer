@@ -7,11 +7,9 @@ CREATE TABLE IF NOT EXISTS Workflows (
 );
 
 CREATE TABLE IF NOT EXISTS WorkflowFencingTokens (
-    workflow_id VARCHAR(255) NOT NULL,
+    workflow_id VARCHAR(255) NOT NULL PRIMARY KEY,
     fencing_token INTEGER NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_workflow_fencing_tokens_workflow_id ON WorkflowFencingTokens (workflow_id);
 
 CREATE TABLE IF NOT EXISTS Checkpoints (
     workflow_id VARCHAR(255) NOT NULL,

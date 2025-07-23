@@ -1,7 +1,7 @@
 use crate::database::server::Server;
 // use hiqlite::cache_idx::CacheIndex;
 use hiqlite::{Client, Error, Node, NodeConfig, start_node};
-use hiqlite_macros::embed::*;
+use hiqlite_macros::{embed::*, params};
 use std::fmt::Display;
 use std::time::Duration;
 use tokio::time;
@@ -79,5 +79,14 @@ pub async fn get_client(
 
 pub async fn init_tables(client: &Client) -> Result<(), Error> {
     client.migrate::<Migrations>().await?;
+    client
+        .query_raw("PRAGMA journal_mode = WAL", params![])
+        .await?;
+    client
+        .query_raw("PRAGMA synchronous = NORMAL", params![])
+        .await?;
+    client
+        .query_raw("PRAGMA wal_autocheckpoint = 500", params![])
+        .await?;
     Ok(())
 }
