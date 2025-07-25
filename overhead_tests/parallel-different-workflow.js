@@ -99,7 +99,7 @@ const task6 = async () => {
   return getData();
 };
 
-const TOTAL_CLUSTER_NODES = 1;
+const TOTAL_CLUSTER_NODES = 3;
 // round-robin port selection to balance load across nodes
 const BASE_PORT = 51000;
 const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
