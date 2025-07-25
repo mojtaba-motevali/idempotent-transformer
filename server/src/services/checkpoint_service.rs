@@ -130,6 +130,9 @@ pub async fn handle_lease_checkpoint(
         });
     }
 
+    let lock_key = format!("{}_{}", data.workflow_id, data.position_checksum);
+    let _ = client.lock(lock_key).await?;
+
     // At least 40 milliseconds is required for lock being held, otherwise thread panics under high load.
     // tokio::time::sleep(std::time::Duration::from_millis(40)).await;
 

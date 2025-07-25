@@ -5,7 +5,7 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 
 use crate::services::workflow_service::handle_workflow_cleanup;
 
-pub async fn clean_up_expired_workflows(client: &Client) -> Result<(), Box<dyn Error>> {
+pub async fn clean_up_expired_workflows(client: &Client) -> Result<JobScheduler, Box<dyn Error>> {
     let scheduler = JobScheduler::new().await?;
     let cloned_client = client.clone();
 
@@ -24,5 +24,5 @@ pub async fn clean_up_expired_workflows(client: &Client) -> Result<(), Box<dyn E
         .await?;
 
     scheduler.start().await?;
-    Ok(())
+    Ok(scheduler)
 }

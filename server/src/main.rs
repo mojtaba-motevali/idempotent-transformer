@@ -5,7 +5,6 @@ use std::env::var;
 use rpc_server::server::start_server;
 use std::error::Error;
 use tokio::signal;
-use tokio::sync::oneshot;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
 
@@ -18,32 +17,6 @@ mod repositories;
 mod rpc_server;
 mod schema;
 mod services;
-
-async fn graceful_shutdown(client: &hiqlite::Client) -> Result<(), Box<dyn Error>> {
-    error!("Initiating graceful shutdown...");
-    // This is very important:
-    // You MUST do a graceful shutdown when your application exits. This will make sure all
-    // lock files are cleaned up and will make your next start faster. If the node starts up
-    // without cleanup lock files, it will delete the DB and re-create it from the latest
-    // snapshot + logs to really make sure it is 100% consistent.
-    // You can set features for `hiqlite` which enable auto-healing (without it will panic on
-    // start), but you should always try to do a shutdown.
-    //
-    // You have 2 options:
-    // - register an automatic shutdown handle with the DbClient like shown above
-    // - trigger the shutdown manually at the end of your application
-    //   This makes sense when you already have structures implemented that catch shutdown signals,
-    //   for instance if you `.await` and API being terminated.
-    //   Then you can do a `client.shutdown().await?`
-    let mut shutdown_handle = client
-        .shutdown_handle()
-        .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-    shutdown_handle
-        .wait()
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-    Ok(())
-}
 
 // Replace #[tokio::main] with custom runtime configuration
 fn main() -> Result<(), Box<dyn Error>> {
@@ -87,68 +60,61 @@ async fn async_main(server_node: Server) -> Result<(), Box<dyn Error>> {
     let client = get_client(server_node.clone(), data_dir, nodes)
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    let mut shutdown_handle = client.shutdown_handle()?;
+
     init_tables(&client)
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-
-    // Create a channel for graceful shutdown
-    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-
+    let mut scheduler = None;
     if server_node.id == 1 {
         // Start the cleanup workflow scheduler
-        if let Err(e) = clean_up_expired_workflows(&client).await {
-            error!("Error during clean up workflows: {}", e);
-            graceful_shutdown(&client).await?;
-            return Err(e);
-        }
+        scheduler = Some(clean_up_expired_workflows(&client).await?);
     }
 
-    let client_clone = client.clone();
-
-    // Spawn a task to handle shutdown signals
-    let shutdown_handle = tokio::spawn(async move {
-        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
-        let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
-
-        tokio::select! {
-            _ = signal::ctrl_c() => {
-                error!("Received Ctrl+C, initiating graceful shutdown...");
-            }
-            _ = sigterm.recv() => {
-                error!("Received SIGTERM, initiating graceful shutdown...");
-            }
-            _ = sigint.recv() => {
-                error!("Received SIGINT, initiating graceful shutdown...");
+    // Helper function for graceful shutdown
+    let shutdown_gracefully = |scheduler: Option<tokio_cron_scheduler::JobScheduler>| async move {
+        if let Some(mut sched) = scheduler {
+            if let Err(e) = sched.shutdown().await {
+                error!("Error shutting down scheduler: {}", e);
             }
         }
-
-        // Perform graceful shutdown
-        if let Err(e) = graceful_shutdown(&client_clone).await {
-            error!("Error during graceful shutdown: {}", e);
-        }
-
-        // Signal the main task to stop
-        let _ = shutdown_tx.send(());
-    });
-
-    // Start the server with shutdown handling
-    let server_result = tokio::select! {
-        result = start_server(&rpc_addr, &client) => result,
-        _ = shutdown_rx => {
-            error!("Server shutdown requested");
-            Ok(())
+        if let Err(e) = shutdown_handle.wait().await {
+            error!("Error during database shutdown: {}", e);
         }
     };
 
-    // Wait for shutdown to complete
-    let _ = shutdown_handle.await;
+    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
+    let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
 
-    match server_result {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            error!("Error starting server: {}", e);
-            graceful_shutdown(&client).await?;
-            Err(e)
+    tokio::select! {
+        result = start_server(&rpc_addr, &client) => {
+            match result {
+                Ok(_) => {
+                    error!("Server stopped unexpectedly");
+                    shutdown_gracefully(scheduler).await;
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Error starting server: {}", e);
+                    shutdown_gracefully(scheduler).await;
+                    Err(e)
+                }
+            }
+        }
+        _ = signal::ctrl_c() => {
+            error!("Received Ctrl+C, initiating graceful shutdown...");
+            shutdown_gracefully(scheduler).await;
+            Ok(())
+        }
+        _ = sigterm.recv() => {
+            error!("Received SIGTERM, initiating graceful shutdown...");
+            shutdown_gracefully(scheduler).await;
+            Ok(())
+        }
+        _ = sigint.recv() => {
+            error!("Received SIGINT, initiating graceful shutdown...");
+            shutdown_gracefully(scheduler).await;
+            Ok(())
         }
     }
 }

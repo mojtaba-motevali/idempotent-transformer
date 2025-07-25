@@ -1,6 +1,7 @@
 use crate::database::server::Server;
+use hiqlite::cache_idx::CacheIndex;
 // use hiqlite::cache_idx::CacheIndex;
-use hiqlite::{Client, Error, Node, NodeConfig, start_node};
+use hiqlite::{Client, Error, Node, NodeConfig, start_node_with_cache};
 use hiqlite_macros::{embed::*, params};
 use std::fmt::Display;
 use std::time::Duration;
@@ -15,21 +16,21 @@ fn log<S: Display>(s: S) {
 #[folder = "migrations"]
 struct Migrations;
 
-// #[derive(Debug, strum::EnumIter)]
-// enum Cache {
-//     One,
-//     Two,
-// }
+#[derive(Debug, strum::EnumIter)]
+enum Cache {
+    One,
+    Two,
+}
 
 // This tiny block of boilerplate is necessary to index concurrent caches properly.
 // The result must always return each elements position in the iterator and this simple typecasting
 // is the easiest way to do it. It is checked for correctness and compared against the iterator
 // during startup.
-// impl CacheIndex for Cache {
-//     fn to_usize(self) -> usize {
-//         self as usize
-//     }
-// }
+impl CacheIndex for Cache {
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
 
 async fn node_config(node_id: u64, nodes: Vec<Server>) -> NodeConfig {
     let mut config = NodeConfig::from_toml("hiqlite.toml", None, None)
@@ -67,7 +68,7 @@ pub async fn get_client(
     // the auto_init setting will initialize the Raft cluster automatically and adds
     // all given Nodes as members, as soon as they are all up and running
 
-    let client = start_node(config).await?;
+    let client = start_node_with_cache::<Cache>(config).await?;
 
     while client.is_healthy_db().await.is_err() {
         log("Waiting for the Cluster to become healthy");

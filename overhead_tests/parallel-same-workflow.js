@@ -73,7 +73,7 @@ const transformer = new IdempotentTransformer({
     },
   },
 });
-const workflowId = `same-workflow-22`;
+const workflowId = `same-workflow-2`;
 
 module.exports = {
   runWorkflow: async (context, events) => {
@@ -81,7 +81,7 @@ module.exports = {
       const runner = await transformer.startWorkflow(workflowId, {
         contextName: 'my-workflow',
       });
-
+      
       await runner.execute('task1', task1);
       await runner.execute('task2', task2);
       await runner.execute('task3', task3);
