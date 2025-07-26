@@ -95,7 +95,7 @@ export class IdempotentTransformer {
               errorCount < 1
             ) {
               ++errorCount;
-              await this.waitFor(100);
+              await this.waitFor(300);
               continue;
             }
             throw err;
