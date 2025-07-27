@@ -10,8 +10,9 @@ services:
       NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
       DATA_DIR: '/app/data'
       NODE_ID: '1'
-      ADDR_API: 'node1:8100'
-      ADDR_RAFT: 'node1:8200'
+      ADDR_API: '0.0.0.0:8100'
+      ADDR_RAFT: '0.0.0.0:8200'
+      # HQL_DANGER_RAFT_STATE_RESET: 'true'
       # Optional: let jemalloc return memory immediately
       # MALLOC_CONF: "dirty_decay_ms:0,muzzy_decay_ms:0"
     volumes:
@@ -32,8 +33,9 @@ services:
       NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
       DATA_DIR: '/app/data'
       NODE_ID: '2'
-      ADDR_API: 'node2:8101'
-      ADDR_RAFT: 'node2:8201'
+      ADDR_API: '0.0.0.0:8101'
+      ADDR_RAFT: '0.0.0.0:8201'
+      # HQL_DANGER_RAFT_STATE_RESET: 'true'
     volumes:
       - data2:/app/data
     ports:
@@ -42,7 +44,6 @@ services:
       - '8201:8201'
     networks:
       - cluster_net
-
   node3:
     image: idempotency-server:latest
     container_name: node3
@@ -52,8 +53,9 @@ services:
       NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
       DATA_DIR: '/app/data'
       NODE_ID: '3'
-      ADDR_API: 'node3:8102'
-      ADDR_RAFT: 'node3:8202'
+      ADDR_API: '0.0.0.0:8102'
+      ADDR_RAFT: '0.0.0.0:8202'
+      # HQL_DANGER_RAFT_STATE_RESET: 'true'
     volumes:
       - data3:/app/data
     ports:
@@ -70,20 +72,19 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /dev/shm/data/node_1
+      device: /var/lib/idempotency-server/node_1
   data2:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /dev/shm/data/node_2
+      device: /var/lib/idempotency-server/node_2
   data3:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /dev/shm/data/node_3
-
+      device: /var/lib/idempotency-server/node_3
 networks:
   cluster_net:
     driver: bridge

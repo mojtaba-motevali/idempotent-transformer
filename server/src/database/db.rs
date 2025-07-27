@@ -1,23 +1,14 @@
 use crate::database::server::Server;
 use hiqlite::cache_idx::CacheIndex;
-// use hiqlite::cache_idx::CacheIndex;
 use hiqlite::{Client, Error, Node, NodeConfig, start_node_with_cache};
 use hiqlite_macros::{embed::*, params};
-use std::fmt::Display;
-use std::time::Duration;
-use tokio::time;
-
-// this way of logging makes our logs easier to see with all the raft logging enabled
-fn log<S: Display>(s: S) {
-    println!("\n\n>>> {s}\n");
-}
 
 #[derive(Embed)]
 #[folder = "migrations"]
 struct Migrations;
 
 #[derive(Debug, strum::EnumIter)]
-enum Cache {
+pub enum Cache {
     One,
     Two,
 }
@@ -48,6 +39,13 @@ async fn node_config(node_id: u64, nodes: Vec<Server>) -> NodeConfig {
     config.log_statements = false;
     config.tls_raft = None;
     config.tls_api = None;
+    config.raft_config.enable_elect = true;
+    config.raft_config.enable_heartbeat = true;
+    config.raft_config.enable_tick = true;
+    config.shutdown_delay_millis = (config.raft_config.election_timeout_max
+        + config.raft_config.heartbeat_interval) as u32
+        + 100;
+    config.health_check_delay_secs = 10;
     config
 }
 
@@ -56,6 +54,8 @@ pub async fn get_client(
     data_dir: String,
     nodes: Vec<Server>,
 ) -> Result<Client, Error> {
+    let nodes_len = nodes.len();
+    let is_cluster = nodes_len > 1;
     let config = {
         let mut config = node_config(args.id, nodes).await;
 
@@ -70,10 +70,9 @@ pub async fn get_client(
 
     let client = start_node_with_cache::<Cache>(config).await?;
 
-    while client.is_healthy_db().await.is_err() {
-        log("Waiting for the Cluster to become healthy");
-        time::sleep(Duration::from_secs(1)).await;
-    }
+    client.wait_until_healthy_cache().await;
+
+    client.wait_until_healthy_db().await;
 
     Ok(client)
 }
@@ -85,9 +84,6 @@ pub async fn init_tables(client: &Client) -> Result<(), Error> {
         .await?;
     client
         .query_raw("PRAGMA synchronous = NORMAL", params![])
-        .await?;
-    client
-        .query_raw("PRAGMA wal_autocheckpoint = 500", params![])
         .await?;
     Ok(())
 }

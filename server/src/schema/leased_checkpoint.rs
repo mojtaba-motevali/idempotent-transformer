@@ -1,7 +1,7 @@
 use hiqlite::Row;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LeasedCheckpointValue {
     pub lease_timeout: i64,
     pub created_at: i64,

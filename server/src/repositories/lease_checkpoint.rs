@@ -2,78 +2,54 @@ use std::error::Error;
 
 use chrono::Utc;
 use hiqlite::Client;
-use hiqlite_macros::params;
 
-use crate::schema::leased_checkpoint::LeasedCheckpointValue;
+use crate::{database::db::Cache, schema::leased_checkpoint::LeasedCheckpointValue};
+
+fn generate_leased_checkpoint_key(position_checksum: i64) -> String {
+    position_checksum.to_string()
+}
 
 pub async fn lease_checkpoint(
     client: &Client,
-    workflow_id: &str,
     position_checksum: i64,
     lease_timeout: i64,
 ) -> Result<LeasedCheckpointValue, Box<dyn Error + Send + Sync>> {
-    let mut leased_checkpoint = client
-        .execute_returning_one(
-            "INSERT INTO CheckpointLeases 
-            (workflow_id, position_checksum, lease_timeout, created_at) 
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (workflow_id, position_checksum) DO UPDATE SET lease_timeout = CheckpointLeases.lease_timeout 
-            RETURNING lease_timeout, created_at",
-            params![
-                workflow_id,
-                position_checksum,
-                lease_timeout,
-                Utc::now().timestamp_millis()
-            ],
+    let created_at = Utc::now().timestamp_millis();
+    let key = generate_leased_checkpoint_key(position_checksum);
+    let minimum_cache_ttl = 30;
+    client
+        .put(
+            Cache::One,
+            key.clone(),
+            &LeasedCheckpointValue {
+                lease_timeout: lease_timeout,
+                created_at,
+            },
+            Some((lease_timeout / 1000).max(minimum_cache_ttl)),
         )
         .await?;
+
     Ok(LeasedCheckpointValue {
-        lease_timeout: leased_checkpoint.get::<i64>("lease_timeout"),
-        created_at: leased_checkpoint.get::<i64>("created_at"),
+        lease_timeout: lease_timeout,
+        created_at: created_at,
     })
 }
 
 pub async fn remove_leased_checkpoint(
     client: &Client,
-    workflow_id: &str,
     position_checksum: i64,
-) -> Result<LeasedCheckpointValue, Box<dyn Error + Send + Sync>> {
-    let mut leased_checkpoint = client
-        .execute_returning_one(
-            "DELETE FROM CheckpointLeases WHERE workflow_id = $1 AND position_checksum = $2 RETURNING lease_timeout, created_at",
-            params![workflow_id, position_checksum],
-        )
-        .await?;
-    Ok(LeasedCheckpointValue {
-        lease_timeout: leased_checkpoint.get::<i64>("lease_timeout"),
-        created_at: leased_checkpoint.get::<i64>("created_at"),
-    })
+) -> Result<Option<LeasedCheckpointValue>, Box<dyn Error + Send + Sync>> {
+    let key = generate_leased_checkpoint_key(position_checksum);
+    let result: Option<LeasedCheckpointValue> = client.get(Cache::One, key.clone()).await?;
+    client.delete(Cache::One, key).await?;
+    Ok(result)
 }
 
 pub async fn get_leased_checkpoint(
     client: &Client,
-    workflow_id: &str,
     position_checksum: i64,
 ) -> Result<Option<LeasedCheckpointValue>, Box<dyn Error + Send + Sync>> {
-    let leased_checkpoint = client
-        .query_as_optional::<LeasedCheckpointValue, _>(
-            "SELECT lease_timeout, created_at FROM CheckpointLeases WHERE workflow_id = $1 AND position_checksum = $2",
-            params![workflow_id, position_checksum],
-        )
-        .await?;
+    let key = generate_leased_checkpoint_key(position_checksum);
+    let leased_checkpoint: Option<LeasedCheckpointValue> = client.get(Cache::One, key).await?;
     Ok(leased_checkpoint)
-}
-
-pub async fn delete_expired_leased_checkpoints(
-    client: &Client,
-    current_timestamp: i64,
-    status: i8,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "DELETE FROM CheckpointLeases WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
-            params![current_timestamp, status ],
-        )
-        .await?;
-    Ok(())
 }

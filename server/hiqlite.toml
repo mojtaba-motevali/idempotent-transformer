@@ -14,7 +14,7 @@
 #
 # default: 0 (invalid)
 # overwritten by: HQL_NODE_ID
-node_id = 1
+#node_id = 1
 
 # All cluster member nodes.
 # Each array value must have the following format:
@@ -22,11 +22,11 @@ node_id = 1
 #
 # default: ["1 localhost:8100 localhost:8200"]
 # overwritten by: HQL_NODES
-nodes = [
-    "1 node1:8100 node1:8200",
-    "2 node2:8101 node2:8201",
-    "3 node3:8102 node3:8202",
-]
+#nodes = [
+#    "1 node1:8100 node1:8200",
+#    "2 node2:8101 node2:8201",
+#    "3 node3:8102 node3:8202",
+#]
 
 # You can set the listen addresses for both the API and Raft servers.
 # These need to somewaht match the definition for the `nodes` above,
@@ -134,7 +134,7 @@ log_sync = "immediate_async"
 #
 # default: 2097152
 # overwritten by: HQL_WAL_SIZE
-wal_size = 1048576
+wal_size = 2097152
 
 # Set to `false` to store Cache WAL files + Snapshots in-memory only.
 # If you run a Cluster, a Node can re-sync cache data after a restart.
@@ -145,7 +145,7 @@ wal_size = 1048576
 #
 # default: true
 # overwritten by: HQL_CACHE_STORAGE_DISK
-cache_storage_disk = false
+cache_storage_disk = true
 
 # Sets the limit when the Raft will trigger the creation of a new
 # state machine snapshot and purge all logs that are included in
@@ -168,7 +168,7 @@ logs_until_snapshot = 10000
 #
 # default: 5000
 # overwritten by: HQL_SHUTDOWN_DELAY_MILLS
-shutdown_delay_millis = 2000
+shutdown_delay_millis = 5000
 
 # If given, these keys / certificates will be used to establish
 # TLS connections between nodes.

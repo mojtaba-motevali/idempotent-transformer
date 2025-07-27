@@ -5,7 +5,6 @@ use std::error::Error;
 
 use crate::helpers::common::return_error_if_true;
 use crate::repositories::checkpoints::delete_expired_checkpoints;
-use crate::repositories::lease_checkpoint::delete_expired_leased_checkpoints;
 use crate::repositories::workflows::{create_or_get_workflow, delete_expired_workflows};
 use crate::repositories::workflows_fencing_tokens::{
     delete_expired_workflow_fencing_tokens, get_workflow_fencing_token,
@@ -80,16 +79,20 @@ pub async fn finish_workflow(
 }
 
 pub async fn handle_workflow_cleanup(client: &Client) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if !client.is_leader_db().await {
+        return Ok(());
+    }
+    println!("Deleting expired workflows");
+
     let current_timestamp = Utc::now().timestamp_millis();
     let status = WorkflowStatus::Completed as i8;
-    let (fencing_tokens, leased_checkpoints, checkpoints) = tokio::join!(
+    let (fencing_tokens, checkpoints) = tokio::join!(
         delete_expired_workflow_fencing_tokens(client, current_timestamp, status),
-        delete_expired_leased_checkpoints(client, current_timestamp, status),
         delete_expired_checkpoints(client, current_timestamp, status),
     );
     fencing_tokens?;
-    leased_checkpoints?;
     checkpoints?;
     delete_expired_workflows(client, current_timestamp, status).await?;
+    println!("Deleted expired workflows");
     Ok(())
 }

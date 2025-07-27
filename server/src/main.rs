@@ -18,8 +18,20 @@ mod rpc_server;
 mod schema;
 mod services;
 
-// Replace #[tokio::main] with custom runtime configuration
-fn main() -> Result<(), Box<dyn Error>> {
+async fn shutdown_gracefully(
+    mut tokio_cron_scheduler: tokio_cron_scheduler::JobScheduler,
+    shutdown_handle: impl std::future::Future<Output = Result<(), hiqlite::Error>>,
+) {
+    if let Err(e) = shutdown_handle.await {
+        error!("Error during database shutdown: {}", e);
+    }
+    if let Err(e) = tokio_cron_scheduler.shutdown().await {
+        error!("Error shutting down scheduler: {}", e);
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
     let server_node = Server {
         id: var("NODE_ID")
@@ -30,19 +42,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         addr_raft: var("ADDR_RAFT").expect("ADDR_RAFT is not set").to_string(),
     };
 
-    // Configure Tokio runtime with custom thread pool
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(8) // Number of worker threads (default: # of CPUs)
-        .max_blocking_threads(512) // Max threads for blocking operations (default: 512)
-        .thread_name("idempotency-worker")
-        .thread_stack_size(2 * 1024 * 1024) // 2MB stack size per thread
-        .enable_all()
-        .build()?;
-
-    rt.block_on(async_main(server_node))
-}
-
-async fn async_main(server_node: Server) -> Result<(), Box<dyn Error>> {
     let rpc_addr = var("RPC_ADDR").expect("RPC_ADDR is not set").to_string();
     let nodes = var("NODES")
         .expect("NODES is not set")
@@ -65,23 +64,7 @@ async fn async_main(server_node: Server) -> Result<(), Box<dyn Error>> {
     init_tables(&client)
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-    let mut scheduler = None;
-    if server_node.id == 1 {
-        // Start the cleanup workflow scheduler
-        scheduler = Some(clean_up_expired_workflows(&client).await?);
-    }
-
-    // Helper function for graceful shutdown
-    let shutdown_gracefully = |scheduler: Option<tokio_cron_scheduler::JobScheduler>| async move {
-        if let Some(mut sched) = scheduler {
-            if let Err(e) = sched.shutdown().await {
-                error!("Error shutting down scheduler: {}", e);
-            }
-        }
-        if let Err(e) = shutdown_handle.wait().await {
-            error!("Error during database shutdown: {}", e);
-        }
-    };
+    let scheduler = clean_up_expired_workflows(&client).await?;
 
     let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
     let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
@@ -91,29 +74,29 @@ async fn async_main(server_node: Server) -> Result<(), Box<dyn Error>> {
             match result {
                 Ok(_) => {
                     error!("Server stopped unexpectedly");
-                    shutdown_gracefully(scheduler).await;
+                    shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
                     Ok(())
                 }
                 Err(e) => {
                     error!("Error starting server: {}", e);
-                    shutdown_gracefully(scheduler).await;
+                    shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
                     Err(e)
                 }
             }
         }
         _ = signal::ctrl_c() => {
             error!("Received Ctrl+C, initiating graceful shutdown...");
-            shutdown_gracefully(scheduler).await;
+            shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
             Ok(())
         }
         _ = sigterm.recv() => {
             error!("Received SIGTERM, initiating graceful shutdown...");
-            shutdown_gracefully(scheduler).await;
+            shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
             Ok(())
         }
         _ = sigint.recv() => {
             error!("Received SIGINT, initiating graceful shutdown...");
-            shutdown_gracefully(scheduler).await;
+            shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
             Ok(())
         }
     }

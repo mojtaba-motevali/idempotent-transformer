@@ -12,12 +12,9 @@ pub async fn clean_up_expired_workflows(client: &Client) -> Result<JobScheduler,
     scheduler
         .add(Job::new_async("1/10 * * * * *", move |_uuid, _l| {
             let job_client = cloned_client.clone();
-            println!("Deleting expired workflows");
             Box::pin(async move {
                 if let Err(e) = handle_workflow_cleanup(&job_client).await {
                     eprintln!("Error during scheduled delete: {e}");
-                } else {
-                    println!("Deleted expired workflows");
                 }
             })
         })?)

@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 hiqlite-macros="0.9.0"
-hiqlite= { version = "0.9.1", features = ["auto-heal", "shutdown-handle", "sqlite", "cache", "dlock", "jemalloc" ]}
+hiqlite= { version = "0.9.1", features = ["full", "jemalloc" ]}
 serde = "1.0.219"
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1.46.1", features = ["full", "signal"] }

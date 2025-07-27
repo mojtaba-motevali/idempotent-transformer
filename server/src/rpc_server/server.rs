@@ -166,9 +166,7 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<ReleaseCheckpointRequest>,
     ) -> Result<Response<ReleaseCheckpointResponse>, Status> {
         let data = request.into_inner();
-        to_status(
-            release_checkpoint(&self.client, &data.workflow_id, data.position_checksum).await,
-        )?;
+        to_status(release_checkpoint(&self.client, data.position_checksum).await)?;
         Ok(Response::new(ReleaseCheckpointResponse {}))
     }
 }

@@ -13,10 +13,17 @@ RUN cargo build --release
 RUN rm -r src
 
 # Copy full source
-COPY . .
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY migrations ./migrations
+COPY build.rs .
+COPY proto ./proto
 
 # Compile the application
 RUN cargo build --release
+
+COPY hiqlite.toml .
+
 
 # === Runtime Stage ===
 FROM alpine:3.20

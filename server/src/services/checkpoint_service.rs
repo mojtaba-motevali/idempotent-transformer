@@ -40,7 +40,7 @@ pub async fn handle_checkpoint(
 ) -> Result<CheckpointOutput, Box<dyn Error + Send + Sync>> {
     let (internal_fencing_token, leased_checkpoint) = tokio::join!(
         get_workflow_fencing_token(client, &data.workflow_id),
-        remove_leased_checkpoint(client, &data.workflow_id, data.position_checksum)
+        remove_leased_checkpoint(client, data.position_checksum),
     );
 
     let stored_fencing_token = internal_fencing_token?;
@@ -59,7 +59,7 @@ pub async fn handle_checkpoint(
 
     // Reject the result if the lease timeout is expired for the worker lease used to belong to.
     // if lease timeout is expired, then we need to check if the fencing token is expired
-    if diff_lease_expiry_from_now(&leased_checkpoint) <= 0 {
+    if leased_checkpoint.is_some() && diff_lease_expiry_from_now(&leased_checkpoint.unwrap()) <= 0 {
         return_error_if_true(
             is_fencing_token_expired,
             Box::new(std::io::Error::new(
@@ -130,19 +130,17 @@ pub async fn handle_lease_checkpoint(
         });
     }
 
-    let lock_key = format!("{}_{}", data.workflow_id, data.position_checksum);
+    let lock_key = data.position_checksum.to_string();
     let _ = client.lock(lock_key).await?;
-
-    // At least 40 milliseconds is required for lock being held, otherwise thread panics under high load.
-    // tokio::time::sleep(std::time::Duration::from_millis(40)).await;
 
     let sent_fencing_token = data.fencing_token;
     let (leased_checkpoint_result, workflow_fencing_token) = tokio::join!(
-        get_leased_checkpoint(client, &data.workflow_id, data.position_checksum),
+        get_leased_checkpoint(client, data.position_checksum),
         get_workflow_fencing_token(client, &data.workflow_id),
     );
     let leased_checkpoint_option = leased_checkpoint_result?;
     let found_fencing_token = workflow_fencing_token?;
+
     if let Some(leased_checkpoint) = leased_checkpoint_option {
         let remaining_time = diff_lease_expiry_from_now(&leased_checkpoint);
         if remaining_time > 0 {
@@ -174,13 +172,7 @@ pub async fn handle_lease_checkpoint(
 
     // if fencing token is the same, then we need to lease the checkpoint
     if sent_fencing_token == stored_fencing_token {
-        lease_checkpoint(
-            client,
-            &data.workflow_id,
-            data.position_checksum,
-            data.lease_timeout,
-        )
-        .await?;
+        lease_checkpoint(client, data.position_checksum, data.lease_timeout).await?;
         return Ok(LeaseCheckpointOutput { response: None });
     }
     Err(Box::new(std::io::Error::other("unexpected state")))
@@ -188,9 +180,8 @@ pub async fn handle_lease_checkpoint(
 
 pub async fn release_checkpoint(
     client: &Client,
-    workflow_id: &str,
     position_checksum: i64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    remove_leased_checkpoint(client, workflow_id, position_checksum).await?;
+    remove_leased_checkpoint(client, position_checksum).await?;
     Ok(())
 }

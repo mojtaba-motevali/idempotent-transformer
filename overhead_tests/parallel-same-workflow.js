@@ -3,6 +3,8 @@ const GrpcAdapter = require('@idempotent-transformer/grpc-adapter').GrpcAdapter;
 const MessagePack = require('@idempotent-transformer/message-pack-adapter').MessagePack;
 const CheckSumGenerator = require('@idempotent-transformer/checksum-adapter').CheckSumGenerator;
 const appendFile = require('fs').appendFile;
+const { faker } = require('@faker-js/faker');
+
 const rpcAdapter = new GrpcAdapter({
   host: 'localhost',
   port: 51000,
@@ -73,7 +75,7 @@ const transformer = new IdempotentTransformer({
     },
   },
 });
-const workflowId = `same-workflow-2`;
+const workflowId = '12';
 
 module.exports = {
   runWorkflow: async (context, events) => {

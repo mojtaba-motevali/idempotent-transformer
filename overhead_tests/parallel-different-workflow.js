@@ -99,7 +99,7 @@ const task6 = async () => {
   return getData();
 };
 
-const TOTAL_CLUSTER_NODES = 1 ;
+const TOTAL_CLUSTER_NODES = 3;
 // round-robin port selection to balance load across nodes
 const BASE_PORT = 51000;
 const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
@@ -112,7 +112,7 @@ const getNextPort = () => {
 
 module.exports = {
   runWorkflow: async (context, events) => {
-    const rpcAdapter = new GrpcAdapter({
+    const rpcAdapter = new GrpcAdapter({  
       host: 'localhost',
       port: getNextPort(),
     });
@@ -124,6 +124,7 @@ module.exports = {
     });
     const runner = await transformer.startWorkflow(context.vars.$uuid, {
       workflowName: context.vars.$uuid,
+      completedRetentionTime: 70000
     });
     try {
         await runner.execute('task1', task1);
@@ -138,7 +139,7 @@ module.exports = {
     } catch (err) {
       await runner.complete();
 
-      console.error(err);
+      console.error(err, context.vars.$uuid);
       events.emit('counter', 'workflows.fail', 1);
     }
   },
