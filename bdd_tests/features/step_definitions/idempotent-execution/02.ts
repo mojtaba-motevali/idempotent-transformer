@@ -49,7 +49,7 @@ BeforeAll(async () => {
 // Setup transformer with in-memory storage for testing
 Given('a workflow including 4 tasks', async function () {
   runner = await transformer.startWorkflow(idempotentWorkflowKey, {
-    workflowName: 'workflow-with-4-tasks',
+    name: 'workflow-with-4-tasks',
   });
 });
 When('I execute 2 tasks successfully and third one fails', async function () {
@@ -71,7 +71,7 @@ When('I execute 2 tasks successfully and third one fails', async function () {
 Then('I retry execution of the all tasks', async function () {
   ++retryCount;
   const newRunner = await transformer.startWorkflow(idempotentWorkflowKey, {
-    workflowName: 'workflow-with-4-tasks',
+    name: 'workflow-with-4-tasks',
   });
   await newRunner.execute('task1', async () => await workflowTasks.task1(input));
   await newRunner.execute('task2', async () => await workflowTasks.task2(input));

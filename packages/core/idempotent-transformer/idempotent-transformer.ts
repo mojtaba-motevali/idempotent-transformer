@@ -27,12 +27,12 @@ export class IdempotentTransformer {
 
   async startWorkflow(
     workflowId: string,
-    { completedRetentionTime, workflowName }: IdempotentTransformerOptions
+    { completedRetentionTime, name }: IdempotentTransformerOptions
   ): Promise<IdempotentRunnerResult> {
     // 1 day
     const { fencingToken } = await this.rpcAdapter.startWorkflow({
       workflowId,
-      name: workflowName,
+      name,
     });
     this.logger?.debug(
       `Leased workflow ${workflowId} with fencing token ${fencingToken}  context bound checkpoints`
@@ -49,7 +49,7 @@ export class IdempotentTransformer {
       },
       execute: async (idempotencyKey, task, taskOptions) => {
         const leaseTimeout = taskOptions?.leaseTimeout || 1000 * 30;
-        const tag = `workflowId:${workflowId} | context:${workflowName} | fencingToken:${fencingToken}`;
+        const tag = `workflowId:${workflowId} | context:${name} | fencingToken:${fencingToken}`;
         this.logger?.debug(`${tag} Executing function`);
         const plainChecksum = `${workflowId}-${step}`;
         this.logger?.debug(`${tag} checkpointChecksum plain: ${plainChecksum}`);
@@ -64,7 +64,7 @@ export class IdempotentTransformer {
         while (true) {
           try {
             this.logger?.debug(
-              `Leasing checkpoint fencing:${fencingToken}| workflowId:${workflowId}| context:${workflowName}| idempotencyKey:${idempotencyKey}| positionChecksum:${positionChecksum}`
+              `Leasing checkpoint fencing:${fencingToken}| workflowId:${workflowId}| context:${name}| idempotencyKey:${idempotencyKey}| positionChecksum:${positionChecksum}`
             );
             const checkpoint = await this.rpcAdapter.leaseCheckpoint({
               workflowId,
@@ -95,7 +95,7 @@ export class IdempotentTransformer {
               errorCount < 1
             ) {
               ++errorCount;
-              await this.waitFor(300);
+              await this.waitFor(100);
               continue;
             }
             throw err;

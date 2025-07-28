@@ -14,6 +14,7 @@ use crate::schema::workflow::WorkflowStatus;
 
 pub struct CreateWorkflowInput {
     pub workflow_id: String,
+    pub name: Option<String>,
 }
 
 pub struct CreateWorkflowOutput {
@@ -25,7 +26,12 @@ pub async fn create_workflow(
     data: CreateWorkflowInput,
 ) -> Result<CreateWorkflowOutput, Box<dyn Error + Send + Sync>> {
     let (_, fencing_token) = tokio::join!(
-        create_or_get_workflow(client, &data.workflow_id, WorkflowStatus::Running),
+        create_or_get_workflow(
+            client,
+            &data.workflow_id,
+            WorkflowStatus::Running,
+            data.name
+        ),
         increment_workflow_fencing_token(client, &data.workflow_id, 1),
     );
 

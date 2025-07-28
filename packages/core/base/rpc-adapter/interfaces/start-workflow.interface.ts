@@ -1,6 +1,6 @@
 export interface StartWorkflowInput {
   workflowId: string;
-  name: string;
+  name?: string;
 }
 
 export interface StartWorkflowOutput {

@@ -64,7 +64,7 @@ Given(
       },
       task2: async () => {
         const innerRunner = await transformer.startWorkflow(`${idempotentWorkflowKey}-task2`, {
-          workflowName: 'inner workflow with 3 tasks',
+          name: 'inner workflow with 3 tasks',
         });
         const result = await innerRunner.execute('task5', async () => innerWorkflowTasks.task5());
         const result2 = await innerRunner.execute('task6', async () => innerWorkflowTasks.task6());
@@ -88,7 +88,7 @@ When('I execute second task of the inner workflow and fails', async function () 
   let error: unknown;
   try {
     runner = await transformer.startWorkflow(idempotentWorkflowKey, {
-      workflowName: 'a workflow with 4 tasks',
+      name: 'a workflow with 4 tasks',
     });
     const result1 = await runner.execute('task1', async () => outerWorkflowTasks.task1());
     const result2 = await runner.execute('task2', async () => outerWorkflowTasks.task2());
@@ -103,7 +103,7 @@ When('I execute second task of the inner workflow and fails', async function () 
 
 Then('I retry the outer workflow to recover from the failure', async function () {
   runner = await transformer.startWorkflow(idempotentWorkflowKey, {
-    workflowName: 'a workflow with 4 tasks',
+    name: 'a workflow with 4 tasks',
   });
   ++retryCount;
 

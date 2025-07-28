@@ -37,7 +37,7 @@ message WorkflowStatusResponse {
 message WorkflowStartRequest {
     string workflow_id = 1;
     bool prefetch_checkpoints = 2;
-    string context_name = 3;
+    optional string context_name = 3;
 }
 
 message WorkflowStartResponse {

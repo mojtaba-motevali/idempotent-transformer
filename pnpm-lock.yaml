@@ -66,8 +66,8 @@ importers:
   packages/checksum-adapter:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.26
-        version: 0.1.26
+        specifier: 0.1.42
+        version: 0.1.42
       crc-32:
         specifier: ^1.2.2
         version: 1.2.2
@@ -109,8 +109,8 @@ importers:
         specifier: ^1.13.4
         version: 1.13.4
       '@idempotent-transformer/core':
-        specifier: 0.1.41
-        version: 0.1.41
+        specifier: 0.1.42
+        version: 0.1.42
     devDependencies:
       grpc-tools:
         specifier: ^1.13.0
@@ -122,8 +122,8 @@ importers:
   packages/message-pack-adapter:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.26
-        version: 0.1.26
+        specifier: 0.1.42
+        version: 0.1.42
       msgpackr:
         specifier: ^1.11.4
         version: 1.11.5
@@ -138,8 +138,8 @@ importers:
   packages/nestjs:
     dependencies:
       '@idempotent-transformer/core':
-        specifier: 0.1.26
-        version: 0.1.26
+        specifier: 0.1.42
+        version: 0.1.42
       '@nestjs/common':
         specifier: ^11.1.3
         version: 11.1.5(class-transformer@0.5.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -503,11 +503,8 @@ packages:
   '@idempotent-transformer/core@0.1.24':
     resolution: {integrity: sha512-+xoQEwL7pFVFHGWHFOz0FesOykvb4KDq5ugJdk9oEcZAFA+JNmu9vXoSGaLrC8JWt+fXaob71CAZoMGd3oBNUg==}
 
-  '@idempotent-transformer/core@0.1.26':
-    resolution: {integrity: sha512-3ph/ZNhsHAtakESOp+NR2nmbf9Rl4RgnURWVnZ2047vPV7C8i+yUEcZu+VDDxznaHZ1VKNvGE88qrg0DKom5rg==}
-
-  '@idempotent-transformer/core@0.1.41':
-    resolution: {integrity: sha512-VP14sGjfHa44kJag+Fk9p+pzHEqpVAEEoZ3Iomaf8i7EDwxj/EXAclGBl+lpsNeD1yiV7D1xK82VPic0n7XzNQ==}
+  '@idempotent-transformer/core@0.1.42':
+    resolution: {integrity: sha512-sRWPAbbvbYJaNBlgU5LYkXcrHLfQQ9EM6uu2lAbSDpzQYMF3CX/b27xtGeZ0DlcVP9uZHTOoBc484O3ww+CFAg==}
 
   '@ioredis/commands@1.2.0':
     resolution: {integrity: sha512-Sx1pU8EM64o2BrqNpEO1CNLtKQwyhuXuqyfH7oGKCk+1a33d2r5saW8zNwm3j6BTExtjrv2BxTgzzkMwts6vGg==}
@@ -3043,9 +3040,7 @@ snapshots:
 
   '@idempotent-transformer/core@0.1.24': {}
 
-  '@idempotent-transformer/core@0.1.26': {}
-
-  '@idempotent-transformer/core@0.1.41': {}
+  '@idempotent-transformer/core@0.1.42': {}
 
   '@ioredis/commands@1.2.0': {}
 

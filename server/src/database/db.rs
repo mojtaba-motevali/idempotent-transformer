@@ -54,8 +54,6 @@ pub async fn get_client(
     data_dir: String,
     nodes: Vec<Server>,
 ) -> Result<Client, Error> {
-    let nodes_len = nodes.len();
-    let is_cluster = nodes_len > 1;
     let config = {
         let mut config = node_config(args.id, nodes).await;
 

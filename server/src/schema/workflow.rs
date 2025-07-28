@@ -13,6 +13,7 @@ pub struct Workflow {
     pub status: i64,
     pub expire_at: Option<i64>,
     pub completed_at: Option<i64>,
+    pub name: Option<String>,
     pub created_at: i64,
 }
 
@@ -27,6 +28,7 @@ impl From<Row<'_>> for Workflow {
             } as i64,
             expire_at: row.get::<Option<i64>>("expire_at"),
             completed_at: row.get::<Option<i64>>("completed_at"),
+            name: row.get::<Option<String>>("name"),
             created_at: row.get("created_at"),
         }
     }

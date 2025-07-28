@@ -10,13 +10,15 @@ pub async fn create_or_get_workflow(
     client: &Client,
     workflow_id: &str,
     status: WorkflowStatus,
+    name: Option<String>,
 ) -> Result<Workflow, Box<dyn Error + Send + Sync>> {
     let mut result = client.execute_returning_one(
-        "INSERT INTO Workflows (id, status, created_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET status = Workflows.status RETURNING *",
+        "INSERT INTO Workflows (id, status, created_at, name) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = $4 RETURNING *",
         params![
             workflow_id,
             status as i64,
-            Utc::now().timestamp_millis()
+            Utc::now().timestamp_millis(),
+            name
         ],
     ).await?;
     Ok(Workflow {
@@ -25,6 +27,7 @@ pub async fn create_or_get_workflow(
         created_at: result.get::<i64>("created_at"),
         expire_at: result.get::<Option<i64>>("expire_at"),
         completed_at: result.get::<Option<i64>>("completed_at"),
+        name: result.get::<Option<String>>("name"),
     })
 }
 

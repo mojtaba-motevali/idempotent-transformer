@@ -114,6 +114,7 @@ impl WorkflowServiceImpl for WorkflowService {
                 &self.client,
                 CreateWorkflowInput {
                     workflow_id: data.workflow_id,
+                    name: data.context_name,
                 },
             )
             .await,

@@ -63,7 +63,11 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
   async startWorkflow(input: StartWorkflowInput): Promise<StartWorkflowOutput> {
     const request = new WorkflowStartRequest();
     request.setWorkflowId(input.workflowId);
-    request.setContextName(input.name);
+
+    if (input.name) {
+      request.setContextName(input.name);
+    }
+
     return new Promise((resolve, reject) => {
       this.client.workflow_start(request, (err, response) => {
         if (err) {

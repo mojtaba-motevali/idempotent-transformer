@@ -38,7 +38,7 @@ BeforeAll(async () => {
 
 Given('a TTL of 5 seconds is configured for workflow completion data state', async function () {
   runner = await transformer.startWorkflow(workflowId, {
-    workflowName: 'workflow-with-4-tasks',
+    name: 'expiry-test',
     completedRetentionTime: ttlMs,
   });
 });

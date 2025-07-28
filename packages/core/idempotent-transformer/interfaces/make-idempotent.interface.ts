@@ -25,5 +25,5 @@ export interface IdempotentTransformerOptions {
   /**
    * The context name to use for the workflow. This is used to differentiate nested workflows.
    */
-  workflowName: string;
+  name?: string;
 }
