@@ -1,0 +1,62 @@
+@startuml
+actor "Worker A" as A
+actor "Worker B" as B
+participant "Engine" as E
+
+== 1. Workflow Started by Worker A ==
+A -> E : [1] Start Workflow
+E -> A : [2] Generate Fencing Token A1
+
+note right of A
+From now on, Worker A includes\nfencing token A1 in each request
+end note
+
+A -> E : [3] Request lease for Task 1 + check execution [Token A1]
+E -> A : [4] Not executed\nLease granted
+
+A -> A : [5] Execute Task 1
+
+== 2. Meanwhile: Worker B Starts Same Workflow ==
+B -> E : [6] Start Workflow
+E -> B : [7] Generate Fencing Token B1
+
+B -> E : [8] Request lease for Task 1 + check execution [Token B1]
+E -> B : [9] Task already leased\nWait X ms
+
+loop [10] Retry every X/10 ms
+    B -> E : Request lease for Task 1 + check execution [Token B1]
+end
+
+== 3. Worker A Finishes Execution ==
+alt [11] Task execution FAILED
+    A -> E : [12] Release Lease [Token A1]
+    A -> A : [13] Stop
+end
+
+alt [14] Task execution SUCCEEDED
+    loop [15] Up to 3 times
+        A -> E : [16] Save Checkpoint [Token A1]
+        alt [17] Checkpoint Success
+            E -> A : [18] Acknowledge Checkpoint
+            A -> E : [19] Release Lease [Token A1]
+            break
+        else [20] Checkpoint Failure
+            A -> A : Retry save
+        end
+    end
+
+    alt [21] All retries failed AND rollback provided
+        A -> A : [22] Rollback
+    end
+
+    A -> A : [23] Abort due to outdated fencing token
+end
+
+== 4. Worker B Reacts ==
+alt [24] Checkpoint was Successful
+    E -> B : [25] Return checkpoint result
+    B -> B : [26] Skip execution
+else [27] Lease Expired
+    B -> B : [28] Execute Task 1
+end
+@enduml
