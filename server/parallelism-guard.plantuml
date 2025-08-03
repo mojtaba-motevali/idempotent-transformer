@@ -1,7 +1,7 @@
 @startuml
 actor "Worker A" as A
 actor "Worker B" as B
-participant "Engine" as E
+participant "Workflow Engine" as E
 
 == 1. Workflow Started by Worker A ==
 A -> E : [1] Start Workflow
