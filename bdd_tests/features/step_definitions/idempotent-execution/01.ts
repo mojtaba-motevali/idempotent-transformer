@@ -3,7 +3,6 @@ import { expect } from 'chai';
 import { IdempotentRunnerResult, IdempotentTransformer } from '@idempotent-transformer/core';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
 import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 
@@ -26,7 +25,6 @@ BeforeAll(async () => {
     rpcAdapter,
     serializer: MessagePack.getInstance(),
     logger: null,
-    checksumGenerator: new CheckSumGenerator(),
   });
 });
 

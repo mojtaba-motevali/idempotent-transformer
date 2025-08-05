@@ -1,4 +1,3 @@
-export { IdempotentCheckSumGenerator } from './checksum-generator';
 export { IdempotentLogger } from './logger';
 export {
   IdempotentSerializer,

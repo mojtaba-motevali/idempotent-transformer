@@ -9,7 +9,6 @@ import {
 import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
 import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 
 @Serialize({
@@ -83,7 +82,6 @@ BeforeAll(async () => {
     }),
     serializer: messagePack,
     logger: null,
-    checksumGenerator: new CheckSumGenerator(),
   });
 });
 

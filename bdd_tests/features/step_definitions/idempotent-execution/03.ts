@@ -4,7 +4,6 @@ import { IdempotentRunnerResult, IdempotentTransformer } from '@idempotent-trans
 import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 import { faker } from '@faker-js/faker';
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { CheckSumGenerator } from '@idempotent-transformer/checksum-adapter';
 import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
 
 let retryCount = 0;
@@ -34,7 +33,6 @@ BeforeAll(async () => {
   transformer = await IdempotentFactory.getInstance().build({
     rpcAdapter,
     serializer: MessagePack.getInstance(),
-    checksumGenerator: new CheckSumGenerator(),
     logger: null,
   });
 });

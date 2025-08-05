@@ -1,7 +1,6 @@
 const IdempotentTransformer = require('@idempotent-transformer/core').IdempotentTransformer;
 const GrpcAdapter = require('@idempotent-transformer/grpc-adapter').GrpcAdapter;
 const MessagePack = require('@idempotent-transformer/message-pack-adapter').MessagePack;
-const CheckSumGenerator = require('@idempotent-transformer/checksum-adapter').CheckSumGenerator;
 const appendFile = require('fs').appendFile;
 const { faker } = require('@faker-js/faker');
 
@@ -68,7 +67,6 @@ const task5 = async () => {
 const transformer = new IdempotentTransformer({
   rpcAdapter,
   serializer: messagePack,
-  checksumGenerator: new CheckSumGenerator(),
   logger: {
     debug: (message) => {
       console.log(message);

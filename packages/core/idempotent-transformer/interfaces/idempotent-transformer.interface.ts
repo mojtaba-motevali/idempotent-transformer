@@ -1,4 +1,4 @@
-import { IdempotentCheckSumGenerator, IdempotentLogger, IdempotentSerializer } from '../../base';
+import { IdempotentLogger, IdempotentSerializer } from '../../base';
 import { IdempotentRpcAdapter } from '../../base/rpc-adapter';
 
 export interface IdempotentTransformerInput {
@@ -13,12 +13,6 @@ export interface IdempotentTransformerInput {
    * @default MessagePack
    */
   serializer: IdempotentSerializer;
-
-  /**
-   * The crypto to use for the idempotent transformer
-   * @default md5
-   */
-  checksumGenerator: IdempotentCheckSumGenerator;
 
   /**
    * The rpc adapter to use for the idempotent transformer

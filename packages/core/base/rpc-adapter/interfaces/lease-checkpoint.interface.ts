@@ -2,8 +2,8 @@ export interface LeaseCheckpointInput {
   workflowId: string;
   fencingToken: number;
   leaseTimeout: number;
-  positionChecksum: number;
-  idempotencyChecksum: number;
+  position: number;
+  idempotencyKey: string;
 }
 
 export interface LeaseCheckpointOutput {

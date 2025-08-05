@@ -1,7 +1,6 @@
 const IdempotentTransformer = require('@idempotent-transformer/core').IdempotentTransformer;
 const GrpcAdapter = require('@idempotent-transformer/grpc-adapter').GrpcAdapter;
 const MessagePack = require('@idempotent-transformer/message-pack-adapter').MessagePack;
-const CheckSumGenerator = require('@idempotent-transformer/checksum-adapter').CheckSumGenerator;
 const { faker } = require('@faker-js/faker');
 
 const messagePack = MessagePack.getInstance();
@@ -119,7 +118,6 @@ module.exports = {
     const transformer = new IdempotentTransformer({
       rpcAdapter,
       serializer: messagePack,
-      checksumGenerator: new CheckSumGenerator(),
       log: null,
     });
     const runner = await transformer.startWorkflow(context.vars.$uuid, {

@@ -14,9 +14,9 @@ use crate::schema::leased_checkpoint::LeasedCheckpointValue;
 pub struct CheckpointInput {
     pub workflow_id: String,
     pub fencing_token: i64,
-    pub position_checksum: i64,
+    pub position: i64,
     pub value: Vec<u8>,
-    pub idempotency_checksum: i64,
+    pub idempotency_key: String,
 }
 
 pub struct CheckpointOutput {
@@ -40,7 +40,7 @@ pub async fn handle_checkpoint(
 ) -> Result<CheckpointOutput, Box<dyn Error + Send + Sync>> {
     let (internal_fencing_token, leased_checkpoint) = tokio::join!(
         get_workflow_fencing_token(client, &data.workflow_id),
-        remove_leased_checkpoint(client, data.position_checksum),
+        remove_leased_checkpoint(client, &data.workflow_id, data.position),
     );
 
     let stored_fencing_token = internal_fencing_token?;
@@ -76,8 +76,8 @@ pub async fn handle_checkpoint(
         client,
         &data.workflow_id,
         data.value,
-        data.position_checksum,
-        data.idempotency_checksum,
+        data.position,
+        data.idempotency_key,
     )
     .await?;
 
@@ -87,9 +87,9 @@ pub async fn handle_checkpoint(
 pub struct LeaseCheckpointInput {
     pub workflow_id: String,
     pub fencing_token: i64,
-    pub position_checksum: i64,
+    pub position: i64,
     pub lease_timeout: i64,
-    pub idempotency_checksum: i64,
+    pub idempotency_key: String,
 }
 
 pub enum LeaseCheckpointReturnType {
@@ -114,12 +114,12 @@ pub async fn handle_lease_checkpoint(
     // in case it has not been possible to release the lock properly. This prevents deadlocks
     // just because some client or server crashed.
 
-    let result = get_checkpoint(client, &data.workflow_id, data.position_checksum).await?;
+    let result = get_checkpoint(client, &data.workflow_id, data.position).await?;
 
     // if checkpoint is already leased, then we need to return the value
     if let Some(checkpoint) = result {
         return_error_if_true(
-            checkpoint.idempotency_checksum != data.idempotency_checksum,
+            checkpoint.idempotency_key != data.idempotency_key,
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
                 "non_deterministic_checkpoint_found",
@@ -130,12 +130,12 @@ pub async fn handle_lease_checkpoint(
         });
     }
 
-    let lock_key = data.position_checksum.to_string();
+    let lock_key = format!("{}:{}", data.workflow_id, data.position);
     let _ = client.lock(lock_key).await?;
 
     let sent_fencing_token = data.fencing_token;
     let (leased_checkpoint_result, workflow_fencing_token) = tokio::join!(
-        get_leased_checkpoint(client, data.position_checksum),
+        get_leased_checkpoint(client, &data.workflow_id, data.position),
         get_workflow_fencing_token(client, &data.workflow_id),
     );
     let leased_checkpoint_option = leased_checkpoint_result?;
@@ -172,7 +172,7 @@ pub async fn handle_lease_checkpoint(
 
     // if fencing token is the same, then we need to lease the checkpoint
     if sent_fencing_token == stored_fencing_token {
-        lease_checkpoint(client, data.position_checksum, data.lease_timeout).await?;
+        lease_checkpoint(client, data.workflow_id, data.position, data.lease_timeout).await?;
         return Ok(LeaseCheckpointOutput { response: None });
     }
     Err(Box::new(std::io::Error::other("unexpected state")))
@@ -180,8 +180,9 @@ pub async fn handle_lease_checkpoint(
 
 pub async fn release_checkpoint(
     client: &Client,
-    position_checksum: i64,
+    workflow_id: &str,
+    position: i64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    remove_leased_checkpoint(client, position_checksum).await?;
+    remove_leased_checkpoint(client, workflow_id, position).await?;
     Ok(())
 }

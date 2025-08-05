@@ -1,6 +1,6 @@
 export interface ReleaseLeaseCheckpointInput {
   workflowId: string;
-  positionChecksum: number;
+  position: number;
 }
 
 export interface ReleaseLeaseCheckpointOutput {}

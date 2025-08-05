@@ -14,13 +14,10 @@ CREATE TABLE IF NOT EXISTS WorkflowFencingTokens (
 
 CREATE TABLE IF NOT EXISTS Checkpoints (
     workflow_id VARCHAR(255) NOT NULL,
-    position_checksum INTEGER NOT NULL,
+    position INTEGER NOT NULL,
     value BYTEA,
-    idempotency_checksum INTEGER NOT NULL,
+    idempotency_key VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoints_workflow_id_position ON Checkpoints (
-    workflow_id,
-    position_checksum
-);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoints_workflow_id_position ON Checkpoints (workflow_id, position);
