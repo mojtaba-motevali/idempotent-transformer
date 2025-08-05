@@ -3,141 +3,143 @@
     "counters": {
       "vusers.created_by_name.Run SDK Workflow": 50,
       "vusers.created": 50,
-      "workflows.success": 50,
+      "workflows.fail": 5,
       "vusers.failed": 0,
-      "vusers.completed": 50
+      "vusers.completed": 50,
+      "workflows.success": 45
     },
     "rates": {},
-    "firstCounterAt": 1753647074366,
-    "firstHistogramAt": 1753647074387,
-    "lastCounterAt": 1753647083571,
-    "lastHistogramAt": 1753647083571,
-    "firstMetricAt": 1753647074366,
-    "lastMetricAt": 1753647083571,
-    "period": 1753647080000,
+    "firstCounterAt": 1754388310894,
+    "firstHistogramAt": 1754388311249,
+    "lastCounterAt": 1754388320107,
+    "lastHistogramAt": 1754388320107,
+    "firstMetricAt": 1754388310894,
+    "lastMetricAt": 1754388320107,
+    "period": 1754388320000,
     "summaries": {
       "vusers.session_length": {
-        "min": 4.2,
-        "max": 21,
+        "min": 6.2,
+        "max": 6021,
         "count": 50,
-        "mean": 6.4,
-        "p50": 5,
-        "median": 5,
-        "p75": 5.3,
-        "p90": 7.2,
-        "p95": 17.6,
-        "p99": 18,
-        "p999": 18
+        "mean": 1251.6,
+        "p50": 11.8,
+        "median": 11.8,
+        "p75": 3011.6,
+        "p90": 3011.6,
+        "p95": 5944.6,
+        "p99": 6064.7,
+        "p999": 6064.7
       }
     },
     "histograms": {
       "vusers.session_length": {
-        "min": 4.2,
-        "max": 21,
+        "min": 6.2,
+        "max": 6021,
         "count": 50,
-        "mean": 6.4,
-        "p50": 5,
-        "median": 5,
-        "p75": 5.3,
-        "p90": 7.2,
-        "p95": 17.6,
-        "p99": 18,
-        "p999": 18
+        "mean": 1251.6,
+        "p50": 11.8,
+        "median": 11.8,
+        "p75": 3011.6,
+        "p90": 3011.6,
+        "p95": 5944.6,
+        "p99": 6064.7,
+        "p999": 6064.7
       }
     }
   },
   "intermediate": [
     {
       "counters": {
-        "vusers.created_by_name.Run SDK Workflow": 30,
-        "vusers.created": 30,
-        "workflows.success": 30,
+        "vusers.created_by_name.Run SDK Workflow": 48,
+        "vusers.created": 48,
+        "workflows.fail": 5,
         "vusers.failed": 0,
-        "vusers.completed": 30
+        "vusers.completed": 47,
+        "workflows.success": 42
       },
       "rates": {},
-      "firstCounterAt": 1753647074366,
-      "firstHistogramAt": 1753647074387,
-      "lastCounterAt": 1753647079571,
-      "lastHistogramAt": 1753647079571,
-      "firstMetricAt": 1753647074366,
-      "lastMetricAt": 1753647079571,
-      "period": "1753647070000",
+      "firstCounterAt": 1754388310894,
+      "firstHistogramAt": 1754388311249,
+      "lastCounterAt": 1754388319996,
+      "lastHistogramAt": 1754388319961,
+      "firstMetricAt": 1754388310894,
+      "lastMetricAt": 1754388319996,
+      "period": "1754388310000",
       "summaries": {
         "vusers.session_length": {
-          "min": 4.2,
-          "max": 21,
-          "count": 30,
-          "mean": 7.4,
-          "p50": 5,
-          "median": 5,
-          "p75": 6.9,
-          "p90": 17.6,
-          "p95": 18,
-          "p99": 18,
-          "p999": 18
+          "min": 6.2,
+          "max": 6021,
+          "count": 47,
+          "mean": 1330.9,
+          "p50": 16.3,
+          "median": 16.3,
+          "p75": 3011.6,
+          "p90": 3011.6,
+          "p95": 5944.6,
+          "p99": 6064.7,
+          "p999": 6064.7
         }
       },
       "histograms": {
         "vusers.session_length": {
-          "min": 4.2,
-          "max": 21,
-          "count": 30,
-          "mean": 7.4,
-          "p50": 5,
-          "median": 5,
-          "p75": 6.9,
-          "p90": 17.6,
-          "p95": 18,
-          "p99": 18,
-          "p999": 18
+          "min": 6.2,
+          "max": 6021,
+          "count": 47,
+          "mean": 1330.9,
+          "p50": 16.3,
+          "median": 16.3,
+          "p75": 3011.6,
+          "p90": 3011.6,
+          "p95": 5944.6,
+          "p99": 6064.7,
+          "p999": 6064.7
         }
       }
     },
     {
       "counters": {
-        "vusers.created_by_name.Run SDK Workflow": 20,
-        "vusers.created": 20,
-        "workflows.success": 20,
+        "workflows.success": 3,
         "vusers.failed": 0,
-        "vusers.completed": 20
+        "vusers.completed": 3,
+        "vusers.created_by_name.Run SDK Workflow": 2,
+        "vusers.created": 2
       },
       "rates": {},
-      "firstCounterAt": 1753647080366,
-      "firstHistogramAt": 1753647080371,
-      "lastCounterAt": 1753647083571,
-      "lastHistogramAt": 1753647083571,
-      "firstMetricAt": 1753647080366,
-      "lastMetricAt": 1753647083571,
-      "period": "1753647080000",
+      "firstCounterAt": 1754388320004,
+      "firstHistogramAt": 1754388320004,
+      "lastCounterAt": 1754388320107,
+      "lastHistogramAt": 1754388320107,
+      "firstMetricAt": 1754388320004,
+      "lastMetricAt": 1754388320107,
+      "period": "1754388320000",
       "summaries": {
         "vusers.session_length": {
-          "min": 4.4,
-          "max": 5.7,
-          "count": 20,
-          "mean": 4.9,
-          "p50": 4.9,
-          "median": 4.9,
-          "p75": 5.2,
-          "p90": 5.3,
-          "p95": 5.4,
-          "p99": 5.4,
-          "p999": 5.4
+          "min": 8.4,
+          "max": 9.8,
+          "count": 3,
+          "mean": 8.9,
+          "p50": 8.4,
+          "median": 8.4,
+          "p75": 8.4,
+          "p90": 8.4,
+          "p95": 8.4,
+          "p99": 8.4,
+          "p999": 8.4
         }
       },
       "histograms": {
         "vusers.session_length": {
-          "min": 4.4,
-          "max": 5.7,
-          "count": 20,
-          "mean": 4.9,
-          "p50": 4.9,
-          "median": 4.9,
-          "p75": 5.2,
-          "p90": 5.3,
-          "p95": 5.4,
-          "p99": 5.4,
-          "p999": 5.4
+          "min": 8.4,
+          "max": 9.8,
+          "count": 3,
+          "mean": 8.9,
+          "p50": 8.4,
+          "median": 8.4,
+          "p75": 8.4,
+          "p90": 8.4,
+          "p95": 8.4,
+          "p99": 8.4,
+          "p999": 8.4
         }
       }
     }

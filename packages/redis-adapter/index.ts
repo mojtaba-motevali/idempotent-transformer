@@ -1,1 +1,0 @@
-export { RedisAdapter } from './redis';

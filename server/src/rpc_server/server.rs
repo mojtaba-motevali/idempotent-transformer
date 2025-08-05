@@ -64,9 +64,9 @@ impl WorkflowServiceImpl for WorkflowService {
                 CheckpointInput {
                     workflow_id: data.workflow_id,
                     fencing_token: data.fencing_token,
-                    position_checksum: data.position_checksum,
+                    position: data.position,
                     value: data.value,
-                    idempotency_checksum: data.idempotency_checksum,
+                    idempotency_key: data.idempotency_key,
                 },
             )
             .await,
@@ -87,9 +87,9 @@ impl WorkflowServiceImpl for WorkflowService {
                 LeaseCheckpointInput {
                     workflow_id: data.workflow_id,
                     fencing_token: data.fencing_token,
-                    position_checksum: data.position_checksum,
+                    position: data.position,
                     lease_timeout: data.lease_timeout,
-                    idempotency_checksum: data.idempotency_checksum,
+                    idempotency_key: data.idempotency_key,
                 },
             )
             .await,
@@ -167,7 +167,7 @@ impl WorkflowServiceImpl for WorkflowService {
         request: Request<ReleaseCheckpointRequest>,
     ) -> Result<Response<ReleaseCheckpointResponse>, Status> {
         let data = request.into_inner();
-        to_status(release_checkpoint(&self.client, data.position_checksum).await)?;
+        to_status(release_checkpoint(&self.client, &data.workflow_id, data.position).await)?;
         Ok(Response::new(ReleaseCheckpointResponse {}))
     }
 }

@@ -86,8 +86,8 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     request.setWorkflowId(input.workflowId);
     request.setValue(input.value as string);
     request.setFencingToken(input.fencingToken);
-    request.setPositionChecksum(input.positionChecksum);
-    request.setIdempotencyChecksum(input.idempotencyChecksum);
+    request.setPosition(input.position);
+    request.setIdempotencyKey(input.idempotencyKey);
     return new Promise((resolve, reject) => {
       this.client.checkpoint(request, (err, response) => {
         if (err) {
@@ -106,8 +106,8 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
     request.setWorkflowId(input.workflowId);
     request.setFencingToken(input.fencingToken);
     request.setLeaseTimeout(input.leaseTimeout);
-    request.setPositionChecksum(input.positionChecksum);
-    request.setIdempotencyChecksum(input.idempotencyChecksum);
+    request.setPosition(input.position);
+    request.setIdempotencyKey(input.idempotencyKey);
     return new Promise((resolve, reject) => {
       this.client.lease_checkpoint(request, (err, response) => {
         if (err) {
@@ -162,7 +162,7 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
   ): Promise<ReleaseLeaseCheckpointOutput> {
     const request = new ReleaseCheckpointRequest();
     request.setWorkflowId(input.workflowId);
-    request.setPositionChecksum(input.positionChecksum);
+    request.setPosition(input.position);
     return new Promise((resolve, reject) => {
       this.client.release_checkpoint(request, (err, response) => {
         if (err) {

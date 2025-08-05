@@ -4,8 +4,8 @@ export interface CheckpointInput {
   workflowId: string;
   value: TSerialized;
   fencingToken: number;
-  positionChecksum: number;
-  idempotencyChecksum: number;
+  position: number;
+  idempotencyKey: string;
 }
 
 export interface CheckpointOutput {

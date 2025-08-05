@@ -17,7 +17,7 @@ service WorkflowServiceImpl {
 
 message ReleaseCheckpointRequest {
     string workflow_id = 1;
-    int64 position_checksum = 2;
+    int64 position = 2;
 }
 
 message ReleaseCheckpointResponse {}
@@ -36,8 +36,7 @@ message WorkflowStatusResponse {
 
 message WorkflowStartRequest {
     string workflow_id = 1;
-    bool prefetch_checkpoints = 2;
-    optional string context_name = 3;
+    optional string context_name = 2;
 }
 
 message WorkflowStartResponse {
@@ -50,8 +49,8 @@ message CheckPointRequest {
     string workflow_id = 1;
     bytes value = 2;
     int64 fencing_token = 3;
-    int64 position_checksum = 4;
-    int64 idempotency_checksum = 5;
+    int64 position = 4;
+    string idempotency_key = 5;
     // for readability
     optional string task_name = 6;
 }
@@ -66,8 +65,8 @@ message LeaseCheckpointRequest {
     string workflow_id = 1;
     int64 fencing_token = 2;
     int64 lease_timeout = 3;
-    int64 position_checksum = 4;
-    int64 idempotency_checksum = 5;
+    int64 position = 4;
+    string idempotency_key = 5;
 }
 
 message LeaseCheckpointResponse {
