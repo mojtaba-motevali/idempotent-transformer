@@ -13,9 +13,9 @@
   "packageManager": "pnpm@10.9.0",
   "dependencies": {
     "@faker-js/faker": "^9.8.0",
-    "@idempotent-transformer/core": "0.1.43",
-    "@idempotent-transformer/grpc-adapter": "0.1.17",
-    "@idempotent-transformer/message-pack-adapter": "0.1.5",
+    "@idempotent-transformer/core": "0.1.46",
+    "@idempotent-transformer/grpc-adapter": "0.1.18",
+    "@idempotent-transformer/message-pack-adapter": "0.1.6",
     "google-protobuf": "^3.21.4",
     "ioredis": "^5.6.1"
   }

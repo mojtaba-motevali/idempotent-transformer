@@ -2,7 +2,7 @@ services:
   node1:
     image: idempotency-server:latest # build or pull this image beforehand
     container_name: node1
-    restart: unless-stopped
+    restart: always
     environment:
       # gRPC service address inside the container
       RPC_ADDR: '0.0.0.0:51000'
@@ -15,19 +15,31 @@ services:
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
       # Optional: let jemalloc return memory immediately
       # MALLOC_CONF: "dirty_decay_ms:0,muzzy_decay_ms:0"
-    volumes:
-      - data1:/app/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8200/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # volumes:
+    #   - data1:/app/data
     ports:
       - '51000:51000' # RPC
       - '8100:8100' # API
       - '8200:8200' # Raft
     networks:
       - cluster_net
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0' # Adjust this value based on your system's CPU cores
+        reservations:
+          cpus: '0.5' # Minimum CPU reservation
 
   node2:
     image: idempotency-server:latest
     container_name: node2
-    restart: unless-stopped
+    restart: always
     environment:
       RPC_ADDR: '0.0.0.0:51001'
       NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
@@ -36,18 +48,30 @@ services:
       ADDR_API: '0.0.0.0:8101'
       ADDR_RAFT: '0.0.0.0:8201'
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
-    volumes:
-      - data2:/app/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8201/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # volumes:
+    #   - data2:/app/data
     ports:
       - '51001:51001'
       - '8101:8101'
       - '8201:8201'
     networks:
       - cluster_net
+    deploy:
+      resources:
+        limits:
+          cpus: '3.0' # Adjust this value based on your system's CPU cores
+        reservations:
+          cpus: '0.5' # Minimum CPU reservation
   node3:
     image: idempotency-server:latest
     container_name: node3
-    restart: unless-stopped
+    restart: always
     environment:
       RPC_ADDR: '0.0.0.0:51002'
       NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
@@ -56,14 +80,40 @@ services:
       ADDR_API: '0.0.0.0:8102'
       ADDR_RAFT: '0.0.0.0:8202'
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
-    volumes:
-      - data3:/app/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8202/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # volumes:
+    #   - data3:/app/data
     ports:
       - '51002:51002'
       - '8102:8102'
       - '8202:8202'
     networks:
       - cluster_net
+    deploy:
+      resources:
+        limits:
+          cpus: '3.0' # Adjust this value based on your system's CPU cores
+        reservations:
+          cpus: '0.5' # Minimum CPU reservation
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    ports:
+      - '8080:8080' # Expose the gRPC port
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - cluster_net
+    depends_on:
+      - node1
+      - node2
+      - node3
 
 # Named volumes so every replica keeps its own state
 volumes:
