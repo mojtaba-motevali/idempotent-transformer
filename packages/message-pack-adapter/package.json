@@ -1,6 +1,6 @@
 {
   "name": "@idempotent-transformer/message-pack-adapter",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -11,7 +11,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@idempotent-transformer/core": "0.1.42",
+    "@idempotent-transformer/core": "0.1.45",
     "msgpackr": "^1.11.4"
   },
   "devDependencies": {

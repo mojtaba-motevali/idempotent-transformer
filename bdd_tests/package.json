@@ -11,10 +11,9 @@
     "test": "cucumber-js  -c cucumber.json "
   },
   "dependencies": {
-    "@idempotent-transformer/checksum-adapter": "0.1.4",
-    "@idempotent-transformer/core": "0.1.43",
+    "@idempotent-transformer/core": "0.1.45",
     "@idempotent-transformer/message-pack-adapter": "0.1.5",
-    "@idempotent-transformer/grpc-adapter": "0.1.17"
+    "@idempotent-transformer/grpc-adapter": "0.1.18"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

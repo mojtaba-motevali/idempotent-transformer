@@ -13,6 +13,7 @@ export type IdempotentRunnerResult = {
     options?: IIdempotentTaskOptions<R>
   ) => Promise<R>;
   getWorkflowStatus: (args: WorkflowStatusInput) => Promise<WorkflowStatusOutput>;
+  generateIdempotencyKey: () => Promise<string>;
 };
 
 export interface IdempotentTransformerOptions {

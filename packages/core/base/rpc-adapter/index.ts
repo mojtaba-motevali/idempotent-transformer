@@ -3,6 +3,8 @@ import {
   CheckpointOutput,
   CompleteWorkflowInput,
   CompleteWorkflowOutput,
+  GenerateIdempotencyKeyInput,
+  GenerateIdempotencyKeyOutput,
   LeaseCheckpointInput,
   LeaseCheckpointOutput,
   StartWorkflowInput,
@@ -54,6 +56,13 @@ export interface IdempotentRpcAdapter {
    * @returns The output of the release leased checkpoint RPC.
    */
   releaseLeaseCheckpoint(input: ReleaseLeaseCheckpointInput): Promise<ReleaseLeaseCheckpointOutput>;
+
+  /**
+   * Generates a durable idempotency key.
+   * @param input - The input for the generate idempotency key RPC.
+   * @returns The output of the generate idempotency key RPC.
+   */
+  generateIdempotencyKey(input: GenerateIdempotencyKeyInput): Promise<GenerateIdempotencyKeyOutput>;
 }
 
 export * from './interfaces';

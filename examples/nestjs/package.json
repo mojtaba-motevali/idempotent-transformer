@@ -20,17 +20,16 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@idempotent-transformer/core": "0.1.46",
+    "@idempotent-transformer/grpc-adapter": "0.1.18",
+    "@idempotent-transformer/message-pack-adapter": "0.1.6",
+    "@idempotent-transformer/nestjs": "0.1.24",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "google-protobuf": "^3.21.4",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1",
-    "@idempotent-transformer/core": "0.1.10",
-    "@idempotent-transformer/nestjs": "0.1.0",
-    "@idempotent-transformer/adapter-zstd": "0.1.0",
-    "@idempotent-transformer/adapter-redis": "0.1.10",
-    "@idempotent-transformer/adapter-message-pack": "0.1.0",
-    "@idempotent-transformer/adapter-crypto": "0.1.0"
+    "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

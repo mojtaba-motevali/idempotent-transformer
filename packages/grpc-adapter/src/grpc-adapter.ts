@@ -12,11 +12,14 @@ import {
   ErrCodes,
   StartWorkflowInput,
   StartWorkflowOutput,
+  GenerateIdempotencyKeyInput,
+  GenerateIdempotencyKeyOutput,
 } from '@idempotent-transformer/core';
 import { WorkflowServiceImplClient } from '../gen/workflow_service_grpc_pb';
 import {
   CheckPointRequest,
   CompleteWorkflowRequest,
+  GenerateIdempotencyKeyRequest,
   LeaseCheckpointRequest,
   ReleaseCheckpointRequest,
   WorkflowStartRequest,
@@ -58,6 +61,25 @@ export class GrpcAdapter implements IdempotentRpcAdapter {
         ? credentials.createSsl(tls.rootCerts, tls.privateKey, tls.certChain, tls.verifyOptions)
         : credentials.createInsecure()
     );
+  }
+  async generateIdempotencyKey(
+    input: GenerateIdempotencyKeyInput
+  ): Promise<GenerateIdempotencyKeyOutput> {
+    const request = new GenerateIdempotencyKeyRequest();
+    request.setWorkflowId(input.workflowId);
+    request.setFencingToken(input.fencingToken);
+    request.setPosition(input.position);
+    return new Promise((resolve, reject) => {
+      this.client.generate_idempotency_key(request, (err, response) => {
+        if (err) {
+          reject(handleError(err));
+          return;
+        }
+        resolve({
+          idempotencyKey: response.getIdempotencyKey(),
+        });
+      });
+    });
   }
 
   async startWorkflow(input: StartWorkflowInput): Promise<StartWorkflowOutput> {

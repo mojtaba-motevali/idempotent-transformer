@@ -1,0 +1,41 @@
+@startuml
+actor "Worker" as W
+participant "Workflow Engine" as E
+
+== Task 1 ==
+W -> E : [1] Check if Task 1 executed
+alt [2] Not executed
+    E -> W : [3] Not executed
+    W -> W : [4] Execute Task 1
+    W -> E : [5] Checkpoint Task 1
+    W -> W : [6] Return Task 1 result
+else [2] Already executed
+    E -> W : [3] Already executed
+    W -> W : [4] Return cached Task 1 result
+end
+
+== Task 2 ==
+W -> E : [7] Check if Task 2 executed
+alt [8] Not executed
+    E -> W : [9] Not executed
+    W -> W : [10] Execute Task 2
+    W -> E : [11] Checkpoint Task 2
+    W -> W : [12] Return Task 2 result
+else [8] Already executed
+    E -> W : [9] Already executed
+    W -> W : [10] Return cached Task 2 result
+end
+
+== Task 3 ==
+W -> E : [13] Check if Task 3 executed
+alt [14] Not executed
+    E -> W : [15] Not executed
+    W -> W : [16] Execute Task 3
+    W -> E : [17] Checkpoint Task 3
+    W -> W : [18] Return Task 3 result
+else [14] Already executed
+    E -> W : [15] Already executed
+    W -> W : [16] Return cached Task 3 result
+end
+
+@enduml

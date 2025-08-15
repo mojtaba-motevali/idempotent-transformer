@@ -1,5 +1,10 @@
 import { IdempotentLogger, IdempotentSerializer } from '../base';
-import { ErrCodes, IdempotentRpcAdapter, WorkflowStatusInput } from '../base/rpc-adapter';
+import {
+  ErrCodes,
+  GenerateIdempotencyKeyInput,
+  IdempotentRpcAdapter,
+  WorkflowStatusInput,
+} from '../base/rpc-adapter';
 
 import { WorkflowAbortedException } from './exception/workflow-aborted.exception';
 import {
@@ -170,6 +175,14 @@ export class IdempotentTransformer {
       },
       getWorkflowStatus: async (args: WorkflowStatusInput) => {
         return this.rpcAdapter.getWorkflowStatus(args);
+      },
+      generateIdempotencyKey: async (): Promise<string> => {
+        const { idempotencyKey } = await this.rpcAdapter.generateIdempotencyKey({
+          workflowId,
+          fencingToken,
+          position: position,
+        });
+        return idempotencyKey;
       },
     } as IdempotentRunnerResult;
 

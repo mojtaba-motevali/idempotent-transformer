@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use hiqlite::Client;
+use uuid::Uuid;
 
 use crate::helpers::common::return_error_if_true;
 use crate::repositories::lease_checkpoint::{get_leased_checkpoint, lease_checkpoint};
@@ -75,7 +76,7 @@ pub async fn handle_checkpoint(
     create_checkpoint(
         client,
         &data.workflow_id,
-        data.value,
+        Some(data.value),
         data.position,
         data.idempotency_key,
     )
@@ -125,8 +126,17 @@ pub async fn handle_lease_checkpoint(
                 "non_deterministic_checkpoint_found",
             )),
         )?;
+        return_error_if_true(
+            checkpoint.value.is_none(),
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "checkpoint_value_not_found",
+            )),
+        )?;
         return Ok(LeaseCheckpointOutput {
-            response: Some(LeaseCheckpointReturnType::CheckpointValue(checkpoint.value)),
+            response: Some(LeaseCheckpointReturnType::CheckpointValue(
+                checkpoint.value.unwrap(),
+            )),
         });
     }
 
@@ -185,4 +195,62 @@ pub async fn release_checkpoint(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     remove_leased_checkpoint(client, workflow_id, position).await?;
     Ok(())
+}
+
+pub struct CreateDurableIdempotencyKeyInput {
+    pub workflow_id: String,
+    pub fencing_token: i64,
+    pub position: i64,
+}
+
+pub struct CreateDurableIdempotencyKeyOutput {
+    pub idempotency_key: String,
+}
+
+pub async fn create_durable_idempotency_key(
+    client: &Client,
+    data: CreateDurableIdempotencyKeyInput,
+) -> Result<CreateDurableIdempotencyKeyOutput, Box<dyn Error + Send + Sync>> {
+    let lock_key = format!("{}:{}", data.workflow_id, data.position);
+    let _ = client.lock(lock_key).await?;
+
+    let result = get_checkpoint(client, &data.workflow_id, data.position).await?;
+
+    // if checkpoint is already leased, then we need to return the value
+    if let Some(checkpoint) = result {
+        return Ok(CreateDurableIdempotencyKeyOutput {
+            idempotency_key: checkpoint.idempotency_key,
+        });
+    }
+
+    let sent_fencing_token = data.fencing_token;
+    let workflow_fencing_token = get_workflow_fencing_token(client, &data.workflow_id).await?;
+
+    return_error_if_true(
+        workflow_fencing_token.is_none(),
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "fencing_token_not_found",
+        )),
+    )?;
+    return_error_if_true(
+        workflow_fencing_token.unwrap() > sent_fencing_token,
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "fencing_token_expired",
+        )),
+    )?;
+    let idempotency_key = Uuid::new_v4().to_string();
+    create_checkpoint(
+        client,
+        &data.workflow_id,
+        None,
+        data.position,
+        idempotency_key.clone(),
+    )
+    .await?;
+
+    Ok(CreateDurableIdempotencyKeyOutput {
+        idempotency_key: idempotency_key,
+    })
 }

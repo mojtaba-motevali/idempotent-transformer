@@ -2,12 +2,7 @@ const IdempotentTransformer = require('@idempotent-transformer/core').Idempotent
 const GrpcAdapter = require('@idempotent-transformer/grpc-adapter').GrpcAdapter;
 const MessagePack = require('@idempotent-transformer/message-pack-adapter').MessagePack;
 const appendFile = require('fs').appendFile;
-const { faker } = require('@faker-js/faker');
 
-const rpcAdapter = new GrpcAdapter({
-  host: 'localhost',
-  port: 51000,
-});
 const messagePack = MessagePack.getInstance();
 
 // Track task execution counts
@@ -64,24 +59,35 @@ const task5 = async () => {
   });
   return now.toString();
 };
-const transformer = new IdempotentTransformer({
-  rpcAdapter,
-  serializer: messagePack,
-  logger: {
-    debug: (message) => {
-      console.log(message);
-    },
-  },
-});
-const workflowId = '12';
+const TOTAL_CLUSTER_NODES = 3;
+// round-robin port selection to balance load across nodes
+const BASE_PORT = 51000;
+const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
+let nextNodeIndex = 0;
+const getNextPort = () => {
+  const port = nodePorts[nextNodeIndex];
+  nextNodeIndex = (nextNodeIndex + 1) % nodePorts.length;
+  return port;
+};
+
+const workflowId = '1000';
 
 module.exports = {
   runWorkflow: async (context, events) => {
+    const rpcAdapter = new GrpcAdapter({
+      host: 'localhost',
+      port: getNextPort(),
+    });
+    const transformer = new IdempotentTransformer({
+      rpcAdapter,
+      serializer: messagePack,
+      log: null,
+    });
     try {
       const runner = await transformer.startWorkflow(workflowId, {
         contextName: 'my-workflow',
       });
-      
+
       await runner.execute('task1', task1);
       await runner.execute('task2', task2);
       await runner.execute('task3', task3);

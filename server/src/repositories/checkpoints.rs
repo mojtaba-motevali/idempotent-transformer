@@ -23,7 +23,7 @@ pub async fn get_checkpoint(
 pub async fn create_checkpoint(
     client: &Client,
     workflow_id: &str,
-    value: Vec<u8>,
+    value: Option<Vec<u8>>,
     position: i64,
     idempotency_key: String,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {

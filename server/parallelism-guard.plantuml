@@ -34,29 +34,26 @@ alt [11] Task execution FAILED
 end
 
 alt [14] Task execution SUCCEEDED
-    loop [15] Up to 3 times
-        A -> E : [16] Save Checkpoint [Token A1]
-        alt [17] Checkpoint Success
-            E -> A : [18] Acknowledge Checkpoint
-            A -> E : [19] Release Lease [Token A1]
-            break
-        else [20] Checkpoint Failure
-            A -> A : Retry save
+    loop [15] Up to 10 times
+        alt [16] Checkpoint Success
+        break
+            E -> A : [17] Acknowledge Checkpoint
         end
     end
 
-    alt [21] All retries failed AND rollback provided
-        A -> A : [22] Rollback
-    end
-
-    A -> A : [23] Abort due to outdated fencing token
 end
+    alt [18] All retries failed AND rollback provided
+        A -> A : [19] Rollback
+    end
+  A -> A : [20] Abort due to outdated fencing token
 
-== 4. Worker B Reacts ==
-alt [24] Checkpoint was Successful
-    E -> B : [25] Return checkpoint result
-    B -> B : [26] Skip execution
-else [27] Lease Expired
-    B -> B : [28] Execute Task 1
+== 4. Back to Worker B ==
+B -> E : Request lease for Task 1 + check execution [Token B1]
+alt [21] Worker's A Checkpoint was Successful
+    E -> B : 22 Return checkpoint result
+    B -> B : [23] Skip execution
+end
+alt [24] No Checkpoint was done
+    B -> B : [25] Execute Task 1
 end
 @enduml

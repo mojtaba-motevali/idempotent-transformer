@@ -9,11 +9,13 @@ use std::io;
 
 use crate::repositories::workflows::get_workflow;
 use crate::rpc_server::server::workflow_service::{
-    ReleaseCheckpointRequest, ReleaseCheckpointResponse, WorkflowStartRequest,
-    WorkflowStartResponse, WorkflowStatusRequest, WorkflowStatusResponse,
+    GenerateIdempotencyKeyRequest, GenerateIdempotencyKeyResponse, ReleaseCheckpointRequest,
+    ReleaseCheckpointResponse, WorkflowStartRequest, WorkflowStartResponse, WorkflowStatusRequest,
+    WorkflowStatusResponse,
 };
 use crate::services::checkpoint_service::{
-    CheckpointInput, LeaseCheckpointInput, LeaseCheckpointReturnType, handle_checkpoint,
+    CheckpointInput, CreateDurableIdempotencyKeyInput, LeaseCheckpointInput,
+    LeaseCheckpointReturnType, create_durable_idempotency_key, handle_checkpoint,
     handle_lease_checkpoint, release_checkpoint,
 };
 use crate::services::workflow_service::{
@@ -53,6 +55,26 @@ pub struct WorkflowService {
 // implementing rpc for service defined in .proto
 #[tonic::async_trait]
 impl WorkflowServiceImpl for WorkflowService {
+    async fn generate_idempotency_key(
+        &self,
+        request: Request<GenerateIdempotencyKeyRequest>,
+    ) -> Result<Response<GenerateIdempotencyKeyResponse>, Status> {
+        let data = request.into_inner();
+        let result = to_status(
+            create_durable_idempotency_key(
+                &self.client,
+                CreateDurableIdempotencyKeyInput {
+                    workflow_id: data.workflow_id,
+                    fencing_token: data.fencing_token,
+                    position: data.position,
+                },
+            )
+            .await,
+        )?;
+        Ok(Response::new(GenerateIdempotencyKeyResponse {
+            idempotency_key: result.idempotency_key,
+        }))
+    }
     async fn checkpoint(
         &self,
         request: Request<CheckPointRequest>,

@@ -1,20 +1,23 @@
 import { IdempotentTransformer } from '@idempotent-transformer/core';
-import { IDEMPOTENT_TRANSFORMER } from '@idempotent-transformer/nestjs';
 import { Inject, Injectable } from '@nestjs/common';
 import { appendFile, readFile } from 'fs';
 import { ExampleService } from './example/example.service';
+import { IDEMPOTENT_TRANSFORMER } from '@idempotent-transformer/nestjs';
 
 @Injectable()
 export class AppService {
   constructor(
     @Inject(IDEMPOTENT_TRANSFORMER)
     private readonly idempotent: IdempotentTransformer,
-    private readonly exampleService: ExampleService,
+    private readonly paymentProvider: ExampleService,
   ) {}
+  getPath(itemId: string): string {
+    return `public/${itemId}.json`;
+  }
 
-  async writeFile(path: string, data: string): Promise<boolean> {
+  async savePayment(itemId: string, data: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      appendFile(path, data, (err) => {
+      appendFile(this.getPath(itemId), data, (err) => {
         if (err) {
           reject(err);
         } else {
@@ -24,36 +27,43 @@ export class AppService {
     });
   }
 
-  async readFile(path: string): Promise<string> {
+  async readPayment(itemId: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      readFile(path, (err, data) => {
+      readFile(this.getPath(itemId), (err, data) => {
         if (err) {
           reject(err);
+          return;
         }
         resolve(data.toString());
       });
     });
   }
 
-  async writeJSON(actionId: string, data: { name: string }): Promise<string> {
-    const idempotent = await this.idempotent.makeIdempotent(actionId, {
-      writeFile: (...args: Parameters<typeof this.writeFile>) =>
-        this.writeFile(...args),
-      ping: (...args: Parameters<typeof this.exampleService.ping>) =>
-        this.exampleService.ping(...args),
+  async handlePayment(
+    actionId: string,
+    data: { itemId: string; amount: number },
+  ): Promise<string> {
+    const runner = await this.idempotent.startWorkflow(actionId, {
+      completedRetentionTime: 60000,
+      name: 'Example Existing Workflow',
     });
-    const path = `public/${data.name}.json`;
-    const ping = await idempotent.ping({
-      shouldCompress: true,
-    });
+    const idempotencyKey: string = await runner.generateIdempotencyKey();
+    const referenceId = await runner.execute(idempotencyKey, () =>
+      this.paymentProvider.createPayment(idempotencyKey, data),
+    );
     const json = JSON.stringify({
       ...data,
-      randomId: ping,
+      referenceId,
     });
+    await runner.execute(`Save payment`, () =>
+      this.savePayment(data.itemId, json),
+    );
 
-    await idempotent.writeFile(path, json, {
-      shouldCompress: true,
-    });
-    return await this.readFile(path);
+    const result = await runner.execute('Get payment', () =>
+      this.readPayment(data.itemId),
+    );
+
+    await runner.complete();
+    return result;
   }
 }
