@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test:parallel-same": "npx artillery run --output report-same.json artillery.yaml",
-    "test:parallel-diff": "npx artillery run --output report-diff.json artillery-different-workflows.yaml"
+    "test:parallel-diff": "nice -n 10 taskset -c 2,3  npx artillery run --output report-diff.json artillery-different-workflows.yaml",
+    "test:parallel-ha": "npx artillery run --output report-high-available.json artillery-high-available-workflows.yaml"
   },
   "keywords": [],
   "author": "",

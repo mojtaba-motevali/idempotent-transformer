@@ -59,30 +59,21 @@ const task5 = async () => {
   });
   return now.toString();
 };
-const TOTAL_CLUSTER_NODES = 3;
-// round-robin port selection to balance load across nodes
-const BASE_PORT = 51000;
-const nodePorts = Array.from({ length: TOTAL_CLUSTER_NODES }, (_, i) => BASE_PORT + i);
-let nextNodeIndex = 0;
-const getNextPort = () => {
-  const port = nodePorts[nextNodeIndex];
-  nextNodeIndex = (nextNodeIndex + 1) % nodePorts.length;
-  return port;
-};
+const BASE_PORT = 8080;
 
 const workflowId = '1000';
+const rpcAdapter = new GrpcAdapter({
+  host: 'localhost',
+  port: BASE_PORT,
+});
+const transformer = new IdempotentTransformer({
+  rpcAdapter,
+  serializer: messagePack,
+  log: null,
+});
 
 module.exports = {
   runWorkflow: async (context, events) => {
-    const rpcAdapter = new GrpcAdapter({
-      host: 'localhost',
-      port: getNextPort(),
-    });
-    const transformer = new IdempotentTransformer({
-      rpcAdapter,
-      serializer: messagePack,
-      log: null,
-    });
     try {
       const runner = await transformer.startWorkflow(workflowId, {
         contextName: 'my-workflow',

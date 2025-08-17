@@ -1,0 +1,13 @@
+config:
+  target: 'unused' # required but not used
+  processor: './parallel-different-workflow.js'
+  phases:
+    - name: 'Warm-up'
+      arrivalRate: 1
+      rampTo: 300
+      maxVusers: 300
+      duration: 120
+scenarios:
+  - name: 'Run SDK Workflow'
+    flow:
+      - function: 'runWorkflow'
