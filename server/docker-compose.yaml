@@ -12,6 +12,8 @@ services:
       NODE_ID: '1'
       ADDR_API: '0.0.0.0:8100'
       ADDR_RAFT: '0.0.0.0:8200'
+      TOKIO_WORKER_STACK_SIZE: "4194304"
+      TOKIO_WORKER_THREADS: "16"
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
       # Optional: let jemalloc return memory immediately
       # MALLOC_CONF: "dirty_decay_ms:0,muzzy_decay_ms:0"
@@ -29,12 +31,12 @@ services:
       - '8200:8200' # Raft
     networks:
       - cluster_net
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0' # Adjust this value based on your system's CPU cores
-        reservations:
-          cpus: '0.5' # Minimum CPU reservation
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '4.0' # Adjust this value based on your system's CPU cores
+    #     reservations:
+    #       cpus: '0.5' # Minimum CPU reservation
 
   node2:
     image: idempotency-server:latest
@@ -47,6 +49,8 @@ services:
       NODE_ID: '2'
       ADDR_API: '0.0.0.0:8101'
       ADDR_RAFT: '0.0.0.0:8201'
+      TOKIO_WORKER_STACK_SIZE: "4194304"
+      TOKIO_WORKER_THREADS: "16"
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8201/health']
@@ -62,12 +66,12 @@ services:
       - '8201:8201'
     networks:
       - cluster_net
-    deploy:
-      resources:
-        limits:
-          cpus: '3.0' # Adjust this value based on your system's CPU cores
-        reservations:
-          cpus: '0.5' # Minimum CPU reservation
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '3.0' # Adjust this value based on your system's CPU cores
+    #     reservations:
+    #       cpus: '0.5' # Minimum CPU reservation
   node3:
     image: idempotency-server:latest
     container_name: node3
@@ -79,6 +83,8 @@ services:
       NODE_ID: '3'
       ADDR_API: '0.0.0.0:8102'
       ADDR_RAFT: '0.0.0.0:8202'
+      TOKIO_WORKER_STACK_SIZE: "4194304"
+      TOKIO_WORKER_THREADS: "16"
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8202/health']
@@ -94,12 +100,12 @@ services:
       - '8202:8202'
     networks:
       - cluster_net
-    deploy:
-      resources:
-        limits:
-          cpus: '3.0' # Adjust this value based on your system's CPU cores
-        reservations:
-          cpus: '0.5' # Minimum CPU reservation
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '3.0' # Adjust this value based on your system's CPU cores
+    #     reservations:
+    #       cpus: '0.5' # Minimum CPU reservation
   nginx:
     image: nginx:latest
     container_name: nginx
