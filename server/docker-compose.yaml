@@ -17,12 +17,6 @@ services:
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
       # Optional: let jemalloc return memory immediately
       # MALLOC_CONF: "dirty_decay_ms:0,muzzy_decay_ms:0"
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8200/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     # volumes:
     #   - data1:/app/data
     ports:
@@ -52,12 +46,6 @@ services:
       TOKIO_WORKER_STACK_SIZE: "4194304"
       TOKIO_WORKER_THREADS: "16"
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8201/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     # volumes:
     #   - data2:/app/data
     ports:
@@ -86,12 +74,6 @@ services:
       TOKIO_WORKER_STACK_SIZE: "4194304"
       TOKIO_WORKER_THREADS: "16"
       # HQL_DANGER_RAFT_STATE_RESET: 'true'
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8202/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     # volumes:
     #   - data3:/app/data
     ports:
