@@ -1,186 +1,368 @@
 # Idempotent Transformer
 
-A TypeScript library for creating and working with idempotent transformations. Idempotency is the property of certain operations in mathematics and computer science whereby they can be applied multiple times without changing the result beyond the initial application. This is a crucial concept in building robust and reliable systems, especially in distributed environments where requests might be duplicated.
+A comprehensive TypeScript/JavaScript library for implementing idempotent operations with distributed workflow support, featuring a high-performance Rust server backend.
 
-## Table of Contents
+## Overview
 
-- [Core Concepts](#core-concepts)
-- [Packages](#packages)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [1. Configure the IdempotentTransformer](#1-configure-the-idempotenttransformer)
-  - [2. Get the transformer instance](#2-get-the-transformer-instance)
-  - [3. Make a function idempotent](#3-make-a-function-idempotent)
-  - [NestJS Integration](#nestjs-integration)
-- [Testing](#testing)
-  - [BDD Tests](#bdd-tests)
-  - [Overhead Tests](#overhead-tests)
-- [Examples](#examples)
-- [Development](#development)
-- [License](#license)
+Idempotent Transformer provides a robust solution for ensuring that operations are executed exactly once, even in distributed systems with potential failures and retries. It consists of:
 
-## Core Concepts
+- **Core Library**: TypeScript/JavaScript library for wrapping functions with idempotency guarantees
+- **Rust Server**: High-performance gRPC server for distributed workflow management
+- **Framework Adapters**: Ready-to-use integrations for NestJS, Next.js, and other frameworks
 
-The library is built around a few core concepts:
+## Features
 
-- **IdempotentTransformer**: The main class that orchestrates the process of making functions idempotent.
-- **StateStore**: A storage mechanism to keep track of function executions and their results. You can implement your own or use provided adapters.
-- **Serializer**: A mechanism to serialize and deserialize data before storing it. This is important for complex data types.
-- **Compressor**: An optional component to compress the serialized data to save storage space.
-- **Crypto**: An optional component to hash the input to create a unique key for each execution.
+- 🔄 **True Idempotency**: Guarantees operations execute exactly once
+- 🏗️ **Workflow Support**: Manage complex multi-step workflows with checkpointing
+- 🚀 **High Performance**: Rust backend with async/await support
+- 🔌 **Framework Agnostic**: Works with any JavaScript/TypeScript framework
+- 🎯 **Type Safe**: Full TypeScript support with comprehensive type definitions
+- 🧪 **BDD Testing**: Behavior-driven development tests included
+- 📦 **Modular Design**: Pluggable adapters for RPC communication and serialization
 
-## Packages
+## Architecture
 
-This is a monorepo containing several packages.
+The system consists of two main components:
 
-| Package                                        | Description                                                |
-| ---------------------------------------------- | ---------------------------------------------------------- |
-| `@idempotent-transformer/core`                 | The core library containing the main logic and interfaces. |
-| `@idempotent-transformer/adapter-redis`        | An adapter for using Redis as a state store.               |
-| `@idempotent-transformer/adapter-message-pack` | An adapter for using MessagePack as a serializer.          |
-| `@idempotent-transformer/adapter-zstd`         | An adapter for using ZSTD for compression.                 |
-| `@idempotent-transformer/adapter-crypto`       | An adapter for using MD5 for hashing.                      |
-| `@idempotent-transformer/nestjs`               | A module for easy integration with the NestJS framework.   |
+1. **Client Library** (`packages/core`): TypeScript library that manages workflows and checkpoints
+2. **Server** (`server/`): Rust gRPC server for distributed state management
 
-## Prerequisites
-
-- TypeScript >= 5.0
-
-## Installation
-
-You need to install the core package and any adapters you want to use.
-
-```bash
-npm install @idempotent-transformer/core
-npm install @idempotent-transformer/adapter-redis ioredis
-npm install @idempotent-transformer/adapter-message-pack msgpackr
-npm install @idempotent-transformer/adapter-zstd
-npm install @idempotent-transformer/adapter-crypto
+```
+┌─────────────────┐    gRPC     ┌─────────────────┐
+│   Your App      │ ──────────► │  Rust Server    │
+│  (TypeScript)   │             │  (Workflow      │
+│                 │             │   Management)   │
+└─────────────────┘             └─────────────────┘
 ```
 
-For NestJS integration:
+## Quick Start
+
+### 1. Install the Core Package
 
 ```bash
-npm install @idempotent-transformer/nestjs
+npm install @idempotent-transformer/core @idempotent-transformer/grpc-adapter @idempotent-transformer/message-pack-adapter protobufjs
 ```
 
-## Usage
+### 2. Set Up the Server
 
-### 1. Configure the IdempotentTransformer
+Build and run the Rust server:
 
-First, you need to configure the `IdempotentTransformer` using the `IdempotentFactory`.
+```bash
+# Build the server
+cd server
+docker build -t idempotency-server .
+
+# Run with Docker Compose (recommended for production)
+docker-compose up
+```
+
+Or run a single node:
+
+```bash
+docker run -p 51000:51000 -p 8100:8100 -p 8200:8200 \
+  -e RPC_ADDR="0.0.0.0:51000" \
+  -e NODES="1 localhost:8100 localhost:8200" \
+  -e DATA_DIR="/app/data" \
+  -e NODE_ID="1" \
+  -e ADDR_API="localhost:8100" \
+  -e ADDR_RAFT="localhost:8200" \
+  -v "/dev/shm/data/node_1:/app/data" \
+  idempotency-server
+```
+
+### 3. Configure the Client
 
 ```typescript
 import { IdempotentFactory } from '@idempotent-transformer/core';
-import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
-import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
-import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
-import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
 
-async function configureTransformer() {
-  await IdempotentFactory.build({
-    storage: new RedisAdapter({ options: { host: 'localhost', port: 6379 } }),
-    serializer: MessagePack.getInstance(),
-    compressor: new ZstdCompressor(),
-    crypto: new Md5Adapter(),
-    log: console, // Optional logger
+async function initialize() {
+  const rpcAdapter = new GrpcAdapter({
+    host: 'localhost',
+    port: 51000,
   });
+
+  const transformer = await IdempotentFactory.getInstance().build({
+    rpcAdapter,
+    serializer: MessagePack.getInstance(),
+    logger: null,
+  });
+
+  return transformer;
 }
+
+// Initialize once at app startup
+const transformer = await initialize();
 ```
 
-### 2. Get the transformer instance
+### 4. Use Workflow-Based Idempotent Functions
 
 ```typescript
 import { IdempotentTransformer } from '@idempotent-transformer/core';
 
-const transformer = IdempotentTransformer.getInstance();
+// Start a workflow
+const runner = await transformer.startWorkflow('payment-workflow', {
+  name: 'process-payment',
+  completedRetentionTime: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+});
+
+// Execute tasks within the workflow
+const result = await runner.execute('payment-task', async () => {
+  // Your business logic here
+  return await processPayment(paymentData);
+});
+
+// Complete the workflow
+await runner.complete();
 ```
 
-### 3. Make a function idempotent
+## Packages
 
-You can make any `async` function or a set of functions idempotent using `makeIdempotent`.
+### Core Package (`@idempotent-transformer/core`)
+
+The main library providing the `IdempotentTransformer` class and workflow management.
 
 ```typescript
-class PaymentService {
-  async processPayment(orderId: string, amount: number): Promise<{ status: string }> {
-    // Actual payment processing logic
-    console.log(`Processing payment for order ${orderId} with amount ${amount}`);
-    return { status: 'completed' };
-  }
-}
-
-const paymentService = new PaymentService();
-
-const idempotentPaymentService = await transformer.makeIdempotent(
-  'payment-workflow', // A unique ID for this workflow
-  {
-    processPayment: (...args: Parameters<typeof paymentService.processPayment>) =>
-      paymentService.processPayment(...args),
-  }
-);
-
-// The first call will execute the function
-const result1 = await idempotentPaymentService.processPayment('order-123', 100);
-console.log(result1); // { status: 'completed' } (from execution)
-
-// Subsequent calls with the same arguments will return the cached result
-const result2 = await idempotentPaymentService.processPayment('order-123', 100);
-console.log(result2); // { status: 'completed' } (from cache)
+import { IdempotentTransformer, IdempotentFactory } from '@idempotent-transformer/core';
 ```
 
-### NestJS Integration
+### gRPC Adapter (`@idempotent-transformer/grpc-adapter`)
 
-The `@idempotent-transformer/nestjs` package provides a `IdempotentModule` for easy integration.
-
-In your `app.module.ts`:
+Connects to the Rust server for distributed workflow management.
 
 ```typescript
-import { Module } from '@nestjs/common';
+import { GrpcAdapter } from '@idempotent-transformer/grpc-adapter';
+
+const adapter = new GrpcAdapter({ host: 'localhost', port: 51000 });
+```
+
+### Message Pack Adapter (`@idempotent-transformer/message-pack-adapter`)
+
+Efficient binary serialization using MessagePack.
+
+```typescript
+import { MessagePack } from '@idempotent-transformer/message-pack-adapter';
+
+const serializer = MessagePack.getInstance();
+```
+
+### NestJS Module (`@idempotent-transformer/nestjs`)
+
+Seamless integration with NestJS applications.
+
+```typescript
 import { IdempotentModule } from '@idempotent-transformer/nestjs';
-import { RedisAdapter } from '@idempotent-transformer/adapter-redis';
-import { MessagePack } from '@idempotent-transformer/adapter-message-pack';
-import { ZstdCompressor } from '@idempotent-transformer/adapter-zstd';
-import { Md5Adapter } from '@idempotent-transformer/adapter-crypto';
 
 @Module({
   imports: [
     IdempotentModule.registerAsync({
-      useFactory: () => {
-        return {
-          storage: new RedisAdapter({ options: { host: 'localhost', port: 6379 } }),
-          serializer: MessagePack.getInstance(),
-          compressor: new ZstdCompressor(),
-          crypto: new Md5Adapter(),
-        };
-      },
+      useFactory: () => ({
+        rpcAdapter: new GrpcAdapter({ host: 'localhost', port: 51000 }),
+        serializer: MessagePack.getInstance(),
+        logger: console,
+      }),
     }),
   ],
 })
 export class AppModule {}
 ```
 
-Then you can inject the `IdempotentTransformer` in your services:
+## Workflow Management
+
+### Basic Workflow Usage
 
 ```typescript
-import { Injectable, Inject } from '@nestjs/common';
-import { IdempotentTransformer, IDEMPOTENT_TRANSFORMER } from '@idempotent-transformer/nestjs';
+// Start a workflow
+const runner = await transformer.startWorkflow('unique-workflow-id', {
+  name: 'workflow-name',
+  completedRetentionTime: 60 * 60 * 1000, // 1 hour in milliseconds
+});
 
-@Injectable()
-export class AppService {
-  constructor(
-    @Inject(IDEMPOTENT_TRANSFORMER) private readonly transformer: IdempotentTransformer
-  ) {}
+// Execute tasks with idempotency
+const result1 = await runner.execute('task1', async () => {
+  return await performTask1();
+});
 
-  // ... use the transformer
+const result2 = await runner.execute('task2', async () => {
+  return await performTask2(result1);
+});
+
+// Complete the workflow
+await runner.complete();
+```
+
+### Nested Workflows
+
+```typescript
+// Outer workflow
+const outerRunner = await transformer.startWorkflow('outer-workflow', {
+  name: 'outer-workflow',
+  completedRetentionTime: 2 * 60 * 60 * 1000, // 2 hours in milliseconds
+});
+
+await outerRunner.execute('outer-task1', async () => {
+  // Inner workflow
+  const innerRunner = await transformer.startWorkflow('inner-workflow', {
+    name: 'inner-workflow',
+    completedRetentionTime: 30 * 60 * 1000, // 30 minutes in milliseconds
+  });
+
+  await innerRunner.execute('inner-task1', async () => {
+    return await performInnerTask();
+  });
+
+  await innerRunner.complete();
+});
+
+await outerRunner.complete();
+```
+
+### Error Handling and Recovery
+
+```typescript
+try {
+  const runner = await transformer.startWorkflow('workflow-id', {
+    name: 'workflow-name',
+    completedRetentionTime: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+  });
+
+  await runner.execute('task1', async () => await task1());
+  await runner.execute('task2', async () => await task2());
+  await runner.execute('task3', async () => await task3());
+  await runner.complete();
+} catch (error) {
+  // On retry, completed tasks won't re-execute
+  const runner = await transformer.startWorkflow('workflow-id', {
+    name: 'workflow-name',
+    completedRetentionTime: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+  });
+
+  // Only failed tasks will execute
+  await runner.execute('task1', async () => await task1());
+  await runner.execute('task2', async () => await task2());
+  await runner.execute('task3', async () => await task3());
+  await runner.complete();
 }
+```
+
+## Server Configuration
+
+### Environment Variables
+
+| Variable    | Description            | Default                   |
+| ----------- | ---------------------- | ------------------------- |
+| `RPC_ADDR`  | gRPC service address   | `0.0.0.0:51000`           |
+| `NODES`     | Cluster member list    | `1 node1:8100 node1:8200` |
+| `DATA_DIR`  | Data directory         | `/app/data`               |
+| `NODE_ID`   | Node identifier        | `1`                       |
+| `ADDR_API`  | API address            | `0.0.0.0:8100`            |
+| `ADDR_RAFT` | Raft consensus address | `0.0.0.0:8200`            |
+
+### Docker Compose Setup
+
+The included `docker-compose.yaml` sets up a 3-node cluster:
+
+```bash
+cd server
+docker-compose up
+```
+
+This creates:
+
+- 3 server nodes (node1, node2, node3)
+- Nginx load balancer
+- Persistent volumes for each node
+
+### Single Node Development
+
+For development, you can run a single node:
+
+```bash
+cd server
+docker build -t idempotency-server .
+docker run -p 51000:51000 idempotency-server
+```
+
+## Advanced Usage
+
+### Custom Serialization
+
+Use the `@Serialize` decorator for complex objects:
+
+```typescript
+import { Serialize } from '@idempotent-transformer/core';
+
+@Serialize({
+  name: 'User',
+  serializeMethodName: 'serialize',
+  deserializeMethodName: 'deserialize',
+})
+class User {
+  #id: string;
+  #name: string;
+
+  constructor(id: string, name: string) {
+    this.#id = id;
+    this.#name = name;
+  }
+
+  serialize(): { id: string; name: string } {
+    return { id: this.#id, name: this.#name };
+  }
+
+  static deserialize(data: { id: string; name: string }): User {
+    return new User(data.id, data.name);
+  }
+}
+```
+
+### Workflow Options
+
+#### completedRetentionTime
+
+The `completedRetentionTime` option specifies how long (in milliseconds) the workflow state should be retained after completion. This is useful for:
+
+- **Audit trails**: Keep workflow data for compliance requirements
+- **Debugging**: Retain completed workflows for troubleshooting
+- **Resource management**: Automatically clean up old workflow data
+
+```typescript
+// Retain workflow data for 24 hours after completion
+const runner = await transformer.startWorkflow('workflow-id', {
+  name: 'workflow-name',
+  completedRetentionTime: 24 * 60 * 60 * 1000, // 24 hours
+});
+
+// Retain workflow data for 30 minutes after completion
+const runner = await transformer.startWorkflow('workflow-id', {
+  name: 'workflow-name',
+  completedRetentionTime: 30 * 60 * 1000, // 30 minutes
+});
+
+// Default retention (24 hours) if not specified
+const runner = await transformer.startWorkflow('workflow-id', {
+  name: 'workflow-name',
+});
+```
+
+### Task Options
+
+```typescript
+await runner.execute(
+  'task-name',
+  async () => {
+    return await performTask();
+  },
+  {
+    leaseTimeout: 30000, // 30 seconds lease timeout
+  }
+);
 ```
 
 ## Testing
 
-### BDD Tests
-
-To run the BDD tests, navigate to the `bdd_tests` directory and run the tests:
+The project includes comprehensive BDD tests:
 
 ```bash
 cd bdd_tests
@@ -188,33 +370,41 @@ npm install
 npm test
 ```
 
-### Overhead Tests
+Test scenarios cover:
 
-These tests measure the storage size impact. You'll need a running Redis instance to execute them.
-
-To run the overhead tests:
-
-```bash
-# Make sure redis is running
-node overhead_tests/experiments/[test_name]
-```
-
-Replace `[test_name]` with the experiment file you want to run (e.g., `compression-disabled-msg-json.experiment.js`).
+- Basic idempotent execution
+- Workflow recovery and checkpointing
+- Nested workflows
+- Contract-based serialization
+- Expiry handling
 
 ## Examples
 
-This repository includes examples for different frameworks:
+### NestJS Example
 
-- **nestjs**: A complete NestJS application showing how to integrate the transformer.
-- **nextjs**: A Next.js application demonstrating usage in a React-based framework.
+See `examples/nestjs/` for a NestJS service with:
 
-## Development
+- gRPC adapter
+- MessagePack serialization
+- Dependency injection
 
-```bash
-pnpm install
-pnpm build:all
-```
+## Performance
+
+The Rust server is optimized for high performance:
+
+- Async/await with Tokio runtime
+- Jemalloc memory allocator
+- gRPC for efficient communication
+- Raft consensus for strong consistency
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.
