@@ -45,7 +45,15 @@ npm install @idempotent-transformer/core @idempotent-transformer/grpc-adapter @i
 
 ### 2. Set Up the Server
 
-Build and run the Rust server:
+Build and run the Rust server using Cargo:
+
+```bash
+# Build the server
+cd server
+cargo run --release
+```
+
+Build and run the Rust server using Docker:
 
 ```bash
 # Build the server
