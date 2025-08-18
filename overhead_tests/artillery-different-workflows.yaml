@@ -3,10 +3,10 @@ config:
   processor: './parallel-different-workflow.js'
   phases:
     - name: 'Phase 1'
-      arrivalRate: 10
-      rampTo: 1000
-      maxVusers: 1000
-      duration: 60
+      arrivalRate: 1
+      rampTo: 1500 
+      maxVusers: 1500
+      duration: 120
     # - pause: 2 # 5-second   pause phase
     # - name: 'Run'
     #   arrivalRate: 3000

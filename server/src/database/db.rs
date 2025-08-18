@@ -39,13 +39,6 @@ async fn node_config(node_id: u64, nodes: Vec<Server>) -> NodeConfig {
     config.log_statements = false;
     config.tls_raft = None;
     config.tls_api = None;
-    config.raft_config.enable_elect = true;
-    config.raft_config.enable_heartbeat = true;
-    config.raft_config.enable_tick = true;
-    config.shutdown_delay_millis = (config.raft_config.election_timeout_max
-        + config.raft_config.heartbeat_interval) as u32
-        + 100;
-    config.health_check_delay_secs = 10;
     config
 }
 

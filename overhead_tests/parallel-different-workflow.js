@@ -5,8 +5,7 @@ const { faker } = require('@faker-js/faker');
 
 const messagePack = MessagePack.getInstance();
 
-
-const getData = () =>  {
+const getData = () => {
   const testData = {
     callback_id: faker.string.uuid(),
     callback_status: 'transaction_complete',
@@ -38,9 +37,9 @@ const getData = () =>  {
         zero_conf_enabled: null,
         notes: null,
         passthrough: JSON.stringify({
-            type: 'deposit',
-            depositId: faker.string.uuid(),
-            tenantId: faker.string.uuid(),
+          type: 'deposit',
+          depositId: faker.string.uuid(),
+          tenantId: faker.string.uuid(),
         }),
       },
       amount: {
@@ -69,7 +68,7 @@ const getData = () =>  {
     },
   };
   return testData;
-}
+};
 // Helper function for waiting
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,10 +98,10 @@ const task6 = async () => {
 };
 
 // round-robin port selection to balance load across nodes
-const BASE_PORT = 8080;
-const rpcAdapter = new GrpcAdapter({  
+const BASE_PORT = 51000;
+const rpcAdapter = new GrpcAdapter({
   host: 'localhost',
-  port:BASE_PORT
+  port: BASE_PORT,
 });
 const transformer = new IdempotentTransformer({
   rpcAdapter,
@@ -112,21 +111,19 @@ const transformer = new IdempotentTransformer({
 
 module.exports = {
   runWorkflow: async (context, events) => {
-
     const runner = await transformer.startWorkflow(context.vars.$uuid, {
       completedRetentionTime: 70000,
       name: context.vars.$uuid,
     });
     try {
-        await runner.execute('task1', task1);
-        await runner.execute('task2', task2);
-        await runner.execute('task3', task3);
-        await runner.execute('task4', task4);
-        await runner.execute('task5', task5);
-        await runner.execute('task6', task6);
-        await runner.complete();
+      await runner.execute('task1', task1);
+      await runner.execute('task2', task2);
+      await runner.execute('task3', task3);
+      await runner.execute('task4', task4);
+      await runner.execute('task5', task5);
+      await runner.execute('task6', task6);
+      await runner.complete();
       events.emit('counter', 'workflows.success', 1);
-
     } catch (err) {
       await runner.complete();
 
