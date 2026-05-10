@@ -1,6 +1,6 @@
 {
   "name": "@idempotent-transformer/grpc-adapter",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4",
-    "@idempotent-transformer/core": "0.1.45"
+    "@idempotent-transformer/core": "0.1.46"
   },
   "publishConfig": {
     "access": "public"
