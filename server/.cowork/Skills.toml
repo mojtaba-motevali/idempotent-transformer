@@ -1,0 +1,170 @@
+[project]
+name = "workflow-engine"
+
+[skills.global]
+
+[skills.install.rust-analyzer-lsp]
+path = "/home/mojtaba/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0"
+plugin = true
+
+[skills.dev.domain-embedded]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-embedded"
+local = false
+
+[skills.dev.rust-daily]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-daily"
+local = false
+
+[skills.dev.rust-trait-explorer]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-trait-explorer"
+local = false
+
+[skills.dev.m13-domain-error]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m13-domain-error"
+local = false
+
+[skills.dev.m05-type-driven]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m05-type-driven"
+local = false
+
+[skills.dev.rust-router]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-router"
+local = false
+
+[skills.dev.m02-resource]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m02-resource"
+local = false
+
+[skills.dev.domain-ml]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-ml"
+local = false
+
+[skills.dev.rust-skill-creator]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-skill-creator"
+local = false
+
+[skills.dev.rust-refactor-helper]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-refactor-helper"
+local = false
+
+[skills.dev.domain-cli]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-cli"
+local = false
+
+[skills.dev.rust-code-navigator]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-code-navigator"
+local = false
+
+[skills.dev.rust-symbol-analyzer]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-symbol-analyzer"
+local = false
+
+[skills.dev.meta-cognition-parallel]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/meta-cognition-parallel"
+local = false
+
+[skills.dev.rust-learner]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-learner"
+local = false
+
+[skills.dev.m04-zero-cost]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m04-zero-cost"
+local = false
+
+[skills.dev.domain-cloud-native]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-cloud-native"
+local = false
+
+[skills.dev.coding-guidelines]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/coding-guidelines"
+local = false
+
+[skills.dev.core-fix-skill-docs]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/core-fix-skill-docs"
+local = false
+
+[skills.dev.m14-mental-model]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m14-mental-model"
+local = false
+
+[skills.dev.m10-performance]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m10-performance"
+local = false
+
+[skills.dev.m01-ownership]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m01-ownership"
+local = false
+
+[skills.dev.m06-error-handling]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m06-error-handling"
+local = false
+
+[skills.dev.core-dynamic-skills]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/core-dynamic-skills"
+local = false
+
+[skills.dev.rust-call-graph]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-call-graph"
+local = false
+
+[skills.dev.core-actionbook]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/core-actionbook"
+local = false
+
+[skills.dev.domain-web]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-web"
+local = false
+
+[skills.dev.m09-domain]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m09-domain"
+local = false
+
+[skills.dev.m11-ecosystem]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m11-ecosystem"
+local = false
+
+[skills.dev.domain-fintech]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-fintech"
+local = false
+
+[skills.dev.m12-lifecycle]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m12-lifecycle"
+local = false
+
+[skills.dev.rust-deps-visualizer]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/rust-deps-visualizer"
+local = false
+
+[skills.dev.domain-iot]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/domain-iot"
+local = false
+
+[skills.dev.m15-anti-pattern]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m15-anti-pattern"
+local = false
+
+[skills.dev.m03-mutability]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m03-mutability"
+local = false
+
+[skills.dev.m07-concurrency]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/m07-concurrency"
+local = false
+
+[skills.dev.unsafe-checker]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/unsafe-checker"
+local = false
+
+[skills.dev.core-agent-browser]
+path = "/home/mojtaba/.cowork/repos/rust-skills/skills/core-agent-browser"
+local = false
+
+[skills.groups]
+
+[triggers]
+
+[security]
+require_lockfile = false
+verify_checksums = false
+show_update_diff = false
+auto_reject_high_risk = false
