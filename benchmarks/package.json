@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "test:latency": "node benchmark-latency.js --port 9000 --workflows 100000 --warmup 5 --concurrency 100",
+    "test:latency:ci": "node benchmark-latency.js --workflows 50 --warmup 5",
+    "test:latency-artillery": "npx artillery run --output report-latency.json artillery-latency.yaml",
     "test:parallel-same": "npx artillery run --output report-same.json artillery.yaml",
     "test:parallel-diff": "nice -n 10 taskset -c 2,3  npx artillery run --output report-diff.json artillery-different-workflows.yaml",
     "test:parallel-ha": "npx artillery run --output report-high-available.json artillery-high-available-workflows.yaml"

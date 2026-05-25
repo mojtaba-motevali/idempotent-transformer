@@ -23,7 +23,6 @@ mod cli;
 mod cron;
 mod database;
 mod error;
-mod helpers;
 mod repositories;
 mod rpc_server;
 mod schema;
