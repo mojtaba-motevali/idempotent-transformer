@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4",
-    "@idempotent-transformer/core": "0.1.46"
+    "@idempotent-transformer/core": "0.1.46",
+    "google-protobuf": "^3.21.4"
   },
   "publishConfig": {
     "access": "public"

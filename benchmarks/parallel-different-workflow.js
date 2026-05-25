@@ -98,7 +98,7 @@ const task6 = async () => {
 };
 
 // round-robin port selection to balance load across nodes
-const BASE_PORT = 51000;
+const BASE_PORT = 9000;
 const rpcAdapter = new GrpcAdapter({
   host: 'localhost',
   port: BASE_PORT,

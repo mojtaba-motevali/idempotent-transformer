@@ -120,6 +120,9 @@ importers:
       '@idempotent-transformer/core':
         specifier: 0.1.46
         version: 0.1.46
+      google-protobuf:
+        specifier: ^3.21.4
+        version: 3.21.4
     devDependencies:
       grpc-tools:
         specifier: ^1.13.0
@@ -1332,6 +1335,9 @@ packages:
 
   google-protobuf@3.15.8:
     resolution: {integrity: sha512-2jtfdqTaSxk0cuBJBtTTWsot4WtR9RVr2rXg7x7OoqiuOKopPrwXpM1G4dXIkLcUNRh3RKzz76C8IOkksZSeOw==}
+
+  google-protobuf@3.21.4:
+    resolution: {integrity: sha512-MnG7N936zcKTco4Jd2PX2U96Kf9PxygAPKBug+74LHzmHXmceN16MmRcdgZv+DGef/S9YvQAfRsNCn4cjf9yyQ==}
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
@@ -3715,6 +3721,8 @@ snapshots:
   globals@14.0.0: {}
 
   google-protobuf@3.15.8: {}
+
+  google-protobuf@3.21.4: {}
 
   graceful-fs@4.2.11: {}
 
