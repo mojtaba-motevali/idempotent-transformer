@@ -1,19 +1,46 @@
-use deadpool_sqlite::Pool;
-use rusqlite::OptionalExtension;
+use std::sync::Arc;
+
+use rocksdb::{Direction, IteratorMode, DB};
 use tracing::instrument;
 
-use crate::{error::RepositoryError, schema::checkpoint::Checkpoint};
+use crate::{
+    error::RepositoryError,
+    schema::checkpoint::Checkpoint,
+    storage::state_machine::CF_CHECKPOINTS,
+};
+
+use super::workflows::expired_workflow_ids;
 
 #[derive(Clone)]
 pub struct CheckpointRepository {
-    pool: Pool,
+    db: Arc<DB>,
 }
 
 impl CheckpointRepository {
-    pub fn new(pool: Pool) -> Self {
-        Self { pool }
+    pub fn new(db: Arc<DB>) -> Self {
+        Self { db }
     }
 
+    fn cf(&self) -> &rocksdb::ColumnFamily {
+        self.db.cf_handle(CF_CHECKPOINTS).unwrap()
+    }
+}
+
+/// Key encoding: `{workflow_id bytes} \x00 {position as 8-byte big-endian}`
+fn cp_key(workflow_id: &str, position: i64) -> Vec<u8> {
+    let mut key = workflow_id.as_bytes().to_vec();
+    key.push(0);
+    key.extend_from_slice(&position.to_be_bytes());
+    key
+}
+
+fn cp_prefix(workflow_id: &str) -> Vec<u8> {
+    let mut p = workflow_id.as_bytes().to_vec();
+    p.push(0);
+    p
+}
+
+impl CheckpointRepository {
     #[instrument(skip(self), fields(workflow_id, position), err)]
     pub async fn upsert(
         &self,
@@ -23,21 +50,16 @@ impl CheckpointRepository {
         value: Option<&[u8]>,
         created_at: i64,
     ) -> Result<(), RepositoryError> {
-        let conn = self.pool.get().await?;
-        let wf_id = workflow_id.to_owned();
-        let ikey = idempotency_key.to_owned();
-        let val = value.map(|v| v.to_vec());
-
-        conn.interact(move |conn| {
-            conn.execute(
-                "INSERT INTO Checkpoints (workflow_id, position, idempotency_key, value, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT (workflow_id, position)
-                 DO UPDATE SET value = excluded.value",
-                rusqlite::params![wf_id, position, ikey, val, created_at],
-            )
-        })
-        .await??;
+        let cp = Checkpoint {
+            workflow_id: workflow_id.to_owned(),
+            position,
+            value: value.map(|v| v.to_vec()),
+            idempotency_key: idempotency_key.to_owned(),
+            created_at,
+        };
+        let bytes = serde_json::to_vec(&cp)
+            .map_err(|e| RepositoryError::Decode(e.to_string()))?;
+        self.db.put_cf(self.cf(), cp_key(workflow_id, position), bytes)?;
         Ok(())
     }
 
@@ -47,39 +69,36 @@ impl CheckpointRepository {
         workflow_id: &str,
         position: i64,
     ) -> Result<Option<Checkpoint>, RepositoryError> {
-        let conn = self.pool.get().await?;
-        let wf_id = workflow_id.to_owned();
-
-        let result = conn
-            .interact(move |conn| {
-                conn.query_row(
-                    "SELECT workflow_id, position, value, idempotency_key, created_at \
-                     FROM Checkpoints WHERE workflow_id = ?1 AND position = ?2",
-                    rusqlite::params![wf_id, position],
-                    Checkpoint::from_row,
-                )
-                .optional()
-            })
-            .await??;
-        Ok(result)
+        match self.db.get_cf(self.cf(), cp_key(workflow_id, position))? {
+            Some(bytes) => {
+                let cp = serde_json::from_slice(&bytes)
+                    .map_err(|e| RepositoryError::Decode(e.to_string()))?;
+                Ok(Some(cp))
+            }
+            None => Ok(None),
+        }
     }
 
     #[instrument(skip(self), err)]
     pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError> {
-        let conn = self.pool.get().await?;
-
-        let n = conn
-            .interact(move |conn| {
-                conn.execute(
-                    "DELETE FROM Checkpoints
-                     WHERE workflow_id IN (
-                         SELECT id FROM Workflows
-                         WHERE status = 1 AND expire_at < ?1
-                     )",
-                    rusqlite::params![before_ms],
-                )
-            })
-            .await??;
-        Ok(n as u64)
+        let expired_ids = expired_workflow_ids(&self.db, before_ms)?;
+        let cf = self.cf();
+        let mut count = 0u64;
+        for workflow_id in &expired_ids {
+            let prefix = cp_prefix(workflow_id);
+            let iter = self.db.iterator_cf(
+                cf,
+                IteratorMode::From(&prefix, Direction::Forward),
+            );
+            for item in iter {
+                let (k, _) = item?;
+                if !k.starts_with(&prefix) {
+                    break;
+                }
+                self.db.delete_cf(cf, &k)?;
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 }

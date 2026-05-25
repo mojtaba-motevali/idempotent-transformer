@@ -2,14 +2,11 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum RepositoryError {
-    #[error("sqlite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
+    #[error("rocksdb error: {0}")]
+    RocksDb(#[from] rocksdb::Error),
 
-    #[error("connection pool error: {0}")]
-    Pool(#[from] deadpool_sqlite::PoolError),
-
-    #[error("interact error: {0}")]
-    Interact(#[from] deadpool_sqlite::InteractError),
+    #[error("decode error: {0}")]
+    Decode(String),
 }
 
 #[derive(Error, Debug)]

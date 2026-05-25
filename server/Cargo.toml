@@ -14,10 +14,6 @@ openraft = { version = "0.9", features = ["serde", "storage-v2"] }
 # Raft log store
 rocksdb = "0.22"
 
-# State machine / repository storage
-rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
-deadpool-sqlite = "0.9"
-
 # Lease cache (TTL, async, no manual sweep)
 moka = { version = "0.12", features = ["future"] }
 

@@ -72,13 +72,13 @@ async fn run(args: Args) -> anyhow::Result<()> {
 
     // 1. Start Raft node
     let raft_node = RaftNode::start(args.node_id, peers, &args.data_dir).await?;
-    let pool = raft_node.pool.clone();
+    let db = raft_node.db.clone();
     let raft = Arc::new(raft_node.raft.clone());
 
     // 2. Repositories
-    let workflow_repo = Arc::new(WorkflowRepository::new(pool.clone()));
-    let checkpoint_repo = Arc::new(CheckpointRepository::new(pool.clone()));
-    let fencing_token_repo = Arc::new(FencingTokenRepository::new(pool.clone()));
+    let workflow_repo = Arc::new(WorkflowRepository::new(db.clone()));
+    let checkpoint_repo = Arc::new(CheckpointRepository::new(db.clone()));
+    let fencing_token_repo = Arc::new(FencingTokenRepository::new(db.clone()));
     let lease_repo = Arc::new(LeaseRepository::new());
 
     // 3. Services

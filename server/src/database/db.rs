@@ -3,19 +3,20 @@ use std::sync::Arc;
 
 use anyhow::Context as _;
 use openraft::{Config, Raft};
+use rocksdb::DB;
 
 use crate::storage::{
     log_store::LogStore,
     network::NetworkFactory,
-    state_machine::StateMachine,
+    state_machine::{open_state_db, StateMachine},
     type_config::{Node, NodeId, TypeConfig},
 };
 
 pub struct RaftNode {
     pub raft: Raft<TypeConfig>,
     pub node_id: NodeId,
-    /// Shared SQLite pool — passed to repository structs in main.rs.
-    pub pool: deadpool_sqlite::Pool,
+    /// State machine DB — shared with repository structs in main.rs.
+    pub db: Arc<DB>,
 }
 
 impl RaftNode {
@@ -24,17 +25,13 @@ impl RaftNode {
         peers: Vec<(NodeId, Node)>,
         data_dir: &str,
     ) -> anyhow::Result<Arc<Self>> {
-        let log_path = format!("{data_dir}/raft-log");
-        let log_store = LogStore::open(&log_path)
+        let log_store = LogStore::open(&format!("{data_dir}/raft-log"))
             .context("failed to open RocksDB log store")?;
 
-        let sqlite_path = format!("{data_dir}/state.db");
-        let pool = deadpool_sqlite::Config::new(&sqlite_path)
-            .create_pool(deadpool_sqlite::Runtime::Tokio1)
-            .context("failed to build SQLite pool")?;
+        let db = open_state_db(&format!("{data_dir}/state"))
+            .context("failed to open RocksDB state machine")?;
 
-        let state_machine = StateMachine::new(pool.clone())
-            .await
+        let state_machine = StateMachine::new(db.clone())
             .context("failed to initialise state machine")?;
 
         let config = Arc::new(
@@ -43,11 +40,15 @@ impl RaftNode {
                 .expect("invalid openraft config"),
         );
 
-        let network = NetworkFactory::new();
-
-        let raft = Raft::new(node_id, config, network, log_store, state_machine)
-            .await
-            .context("failed to start openraft")?;
+        let raft = Raft::new(
+            node_id,
+            config,
+            NetworkFactory::new(),
+            log_store,
+            state_machine,
+        )
+        .await
+        .context("failed to start openraft")?;
 
         if peers.is_empty() {
             let members = BTreeMap::from([(
@@ -63,7 +64,7 @@ impl RaftNode {
             let _ = raft.initialize(members).await;
         }
 
-        Ok(Arc::new(Self { raft, node_id, pool }))
+        Ok(Arc::new(Self { raft, node_id, db }))
     }
 
     pub async fn is_leader(&self) -> bool {
