@@ -8,23 +8,58 @@ name = "idempotency-server"
 path = "src/main.rs"
 
 [dependencies]
-hiqlite-macros="0.10.0"
-hiqlite= { version = "0.10", features = ["full", "jemalloc" ]}
-serde = "1.0.219"
+# Raft consensus
+openraft = { version = "0.9", features = ["serde", "storage-v2"] }
+
+# Raft log store
+rocksdb = "0.22"
+
+# State machine / repository storage
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+deadpool-sqlite = "0.9"
+
+# Lease cache (TTL, async, no manual sweep)
+moka = { version = "0.12", features = ["future"] }
+
+# Per-position in-process locks
+dashmap = "6"
+
+# FlatBuffers runtime (Raft network serialization)
+flatbuffers = "24"
+
+# Typed errors
+thiserror = "1"
+
+# Ergonomic error handling at application boundary
+anyhow = "1"
+
+# Faster Mutex/RwLock for sync contexts
+parking_lot = "0.12"
+
+# JSON — for openraft Membership serialization
+serde_json = "1"
+
+# Async trait support (required by RaftNetwork impl)
+async-trait = "0.1"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Unchanged
+serde = { version = "1.0.219", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1.46.1", features = ["full", "signal", "rt-multi-thread"] }
 prost = "0.11"
 tonic = "0.9"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracing = "0.1.41"
-dotenvy = "0.15.7"
 tokio-cron-scheduler = "0.9"
 strum = "0.27.1"
 uuid = { version = "1.18.0", features = ["v4"] }
 
 [build-dependencies]
 tonic-build = "0.9"
-
+flatbuffers-build = "0.2"
 
 [profile.release]
 opt-level = "z"

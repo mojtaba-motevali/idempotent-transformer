@@ -1,43 +1,75 @@
-use std::error::Error;
+use deadpool_sqlite::Pool;
+use rusqlite::OptionalExtension;
+use tracing::instrument;
 
-use hiqlite::Client;
-use hiqlite_macros::params;
+use crate::error::RepositoryError;
 
-pub async fn get_workflow_fencing_token(
-    client: &Client,
-    workflow_id: &str,
-) -> Result<Option<i64>, Box<dyn Error + Send + Sync>> {
-    let fencing_token = client
-        .query_as_optional::<i64, _>(
-            "SELECT fencing_token FROM WorkflowFencingTokens WHERE workflow_id = $1",
-            params![workflow_id],
-        )
-        .await?;
-    Ok(fencing_token)
+#[derive(Clone)]
+pub struct FencingTokenRepository {
+    pool: Pool,
 }
 
-pub async fn increment_workflow_fencing_token(
-    client: &Client,
-    workflow_id: &str,
-    fencing_token: i64,
-) -> Result<i64, Box<dyn Error + Send + Sync>> {
-    let mut result = client.execute_returning_one(
-        "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token) VALUES ($1, $2) ON CONFLICT (workflow_id) DO UPDATE SET fencing_token = WorkflowFencingTokens.fencing_token + 1 RETURNING fencing_token",
-        params![workflow_id, fencing_token],
-    ).await?;
-    Ok(result.get::<i64>("fencing_token"))
-}
+impl FencingTokenRepository {
+    pub fn new(pool: Pool) -> Self {
+        Self { pool }
+    }
 
-pub async fn delete_expired_workflow_fencing_tokens(
-    client: &Client,
-    current_timestamp: i64,
-    status: i8,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "DELETE FROM WorkflowFencingTokens WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
-            params![current_timestamp, status ],
-        )
-        .await?;
-    Ok(())
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn increment(&self, workflow_id: &str) -> Result<i64, RepositoryError> {
+        let conn = self.pool.get().await?;
+        let wf_id = workflow_id.to_owned();
+
+        let token = conn
+            .interact(move |conn| {
+                conn.query_row(
+                    "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token)
+                     VALUES (?1, 1)
+                     ON CONFLICT (workflow_id)
+                     DO UPDATE SET fencing_token = WorkflowFencingTokens.fencing_token + 1
+                     RETURNING fencing_token",
+                    rusqlite::params![wf_id],
+                    |row| row.get::<_, i64>(0),
+                )
+            })
+            .await??;
+
+        Ok(token)
+    }
+
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn get(&self, workflow_id: &str) -> Result<Option<i64>, RepositoryError> {
+        let conn = self.pool.get().await?;
+        let wf_id = workflow_id.to_owned();
+
+        conn.interact(move |conn| {
+            conn.query_row(
+                "SELECT fencing_token FROM WorkflowFencingTokens WHERE workflow_id = ?1",
+                rusqlite::params![wf_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+        })
+        .await?
+        .map_err(RepositoryError::Sqlite)
+    }
+
+    #[instrument(skip(self), err)]
+    pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError> {
+        let conn = self.pool.get().await?;
+
+        let n = conn
+            .interact(move |conn| {
+                conn.execute(
+                    "DELETE FROM WorkflowFencingTokens
+                     WHERE workflow_id IN (
+                         SELECT id FROM Workflows
+                         WHERE status = 1 AND expire_at < ?1
+                     )",
+                    rusqlite::params![before_ms],
+                )
+            })
+            .await??;
+
+        Ok(n as u64)
+    }
 }

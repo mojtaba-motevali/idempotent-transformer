@@ -1,4 +1,3 @@
-use hiqlite::Row;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,25 +17,15 @@ pub struct Checkpoint {
     pub created_at: i64,
 }
 
-impl From<Row<'_>> for CheckpointValue {
-    fn from(mut row: Row<'_>) -> Self {
-        Self {
-            position: row.get("position"),
-            idempotency_key: row.get("idempotency_key"),
-            value: row.get("value"),
-        }
-    }
-}
-
-impl From<Row<'_>> for Checkpoint {
-    fn from(mut row: Row<'_>) -> Self {
-        Self {
-            workflow_id: row.get("workflow_id"),
-            value: row.get("value"),
-            lease_timeout: row.get("lease_timeout"),
-            position: row.get("position"),
-            idempotency_key: row.get("idempotency_key"),
-            created_at: row.get("created_at"),
-        }
+impl Checkpoint {
+    pub fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            workflow_id:     row.get(0)?,
+            position:        row.get(1)?,
+            value:           row.get(2)?,
+            idempotency_key: row.get(3)?,
+            created_at:      row.get(4)?,
+            lease_timeout:   0, // not stored in DB; set by LeaseRepository
+        })
     }
 }

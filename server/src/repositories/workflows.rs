@@ -1,59 +1,105 @@
-use std::error::Error;
+use deadpool_sqlite::Pool;
+use rusqlite::OptionalExtension;
+use tracing::instrument;
 
-use chrono::Utc;
-use hiqlite::Client;
-use hiqlite_macros::params;
+use crate::{
+    error::RepositoryError,
+    schema::workflow::{Workflow, WorkflowStatus},
+};
 
-use crate::schema::workflow::{Workflow, WorkflowStatus};
-
-pub async fn create_or_get_workflow(
-    client: &Client,
-    workflow_id: &str,
-    status: WorkflowStatus,
-    name: Option<String>,
-) -> Result<Workflow, Box<dyn Error + Send + Sync>> {
-    let mut result = client.execute_returning_one(
-        "INSERT INTO Workflows (id, status, created_at, name) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = $4 RETURNING *",
-        params![
-            workflow_id,
-            status as i64,
-            Utc::now().timestamp_millis(),
-            name
-        ],
-    ).await?;
-    Ok(Workflow {
-        id: result.get::<String>("id"),
-        status: result.get::<i64>("status"),
-        created_at: result.get::<i64>("created_at"),
-        expire_at: result.get::<Option<i64>>("expire_at"),
-        completed_at: result.get::<Option<i64>>("completed_at"),
-        name: result.get::<Option<String>>("name"),
-    })
+#[derive(Clone)]
+pub struct WorkflowRepository {
+    pool: Pool,
 }
 
-pub async fn get_workflow(
-    client: &Client,
-    workflow_id: &str,
-) -> Result<Option<Workflow>, Box<dyn Error + Send + Sync>> {
-    let result = client
-        .query_as_optional::<Workflow, _>(
-            "SELECT * FROM Workflows WHERE id = $1",
-            params![workflow_id],
-        )
-        .await?;
-    Ok(result)
-}
+impl WorkflowRepository {
+    pub fn new(pool: Pool) -> Self {
+        Self { pool }
+    }
 
-pub async fn delete_expired_workflows(
-    client: &Client,
-    current_timestamp: i64,
-    status: i8,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "DELETE FROM Workflows WHERE expire_at < $1 AND status = $2",
-            params![current_timestamp, status],
-        )
-        .await?;
-    Ok(())
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn create_or_get(
+        &self,
+        workflow_id: &str,
+        name: Option<&str>,
+        created_at: i64,
+    ) -> Result<Workflow, RepositoryError> {
+        let conn = self.pool.get().await?;
+        let wf_id = workflow_id.to_owned();
+        let wf_name = name.map(str::to_owned);
+        let status = WorkflowStatus::Running as i64;
+
+        conn.interact(move |conn| {
+            conn.query_row(
+                "INSERT INTO Workflows (id, status, name, created_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (id) DO UPDATE SET name = excluded.name
+                 RETURNING *",
+                rusqlite::params![wf_id, status, wf_name, created_at],
+                Workflow::from_row,
+            )
+        })
+        .await?
+        .map_err(RepositoryError::Sqlite)
+    }
+
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn get_by_id(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<Workflow>, RepositoryError> {
+        let conn = self.pool.get().await?;
+        let wf_id = workflow_id.to_owned();
+
+        conn.interact(move |conn| {
+            conn.query_row(
+                "SELECT * FROM Workflows WHERE id = ?1",
+                rusqlite::params![wf_id],
+                Workflow::from_row,
+            )
+            .optional()
+        })
+        .await?
+        .map_err(RepositoryError::Sqlite)
+    }
+
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn complete(
+        &self,
+        workflow_id: &str,
+        expire_at: i64,
+        completed_at: i64,
+    ) -> Result<(), RepositoryError> {
+        let conn = self.pool.get().await?;
+        let wf_id = workflow_id.to_owned();
+        let status = WorkflowStatus::Completed as i64;
+
+        conn.interact(move |conn| {
+            conn.execute(
+                "UPDATE Workflows SET status = ?1, expire_at = ?2, completed_at = ?3
+                 WHERE id = ?4",
+                rusqlite::params![status, expire_at, completed_at, wf_id],
+            )
+        })
+        .await?
+        .map_err(RepositoryError::Sqlite)?;
+        Ok(())
+    }
+
+    #[instrument(skip(self), err)]
+    pub async fn delete_expired(&self, before_ms: i64) -> Result<u64, RepositoryError> {
+        let conn = self.pool.get().await?;
+        let status = WorkflowStatus::Completed as i64;
+
+        let n = conn
+            .interact(move |conn| {
+                conn.execute(
+                    "DELETE FROM Workflows WHERE expire_at < ?1 AND status = ?2",
+                    rusqlite::params![before_ms, status],
+                )
+            })
+            .await?
+            .map_err(RepositoryError::Sqlite)?;
+        Ok(n as u64)
+    }
 }

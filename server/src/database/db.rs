@@ -1,80 +1,72 @@
-use crate::database::server::Server;
-use hiqlite::cache_idx::CacheIndex;
-use hiqlite::{Client, Error, Node, NodeConfig, start_node_with_cache};
-use hiqlite_macros::{embed::*, params};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-#[derive(Embed)]
-#[folder = "migrations"]
-struct Migrations;
+use anyhow::Context as _;
+use openraft::{Config, Raft};
 
-#[derive(Debug, strum::EnumIter)]
-pub enum Cache {
-    One,
-    Two,
+use crate::storage::{
+    log_store::LogStore,
+    network::NetworkFactory,
+    state_machine::StateMachine,
+    type_config::{Node, NodeId, TypeConfig},
+};
+
+pub struct RaftNode {
+    pub raft: Raft<TypeConfig>,
+    pub node_id: NodeId,
+    /// Shared SQLite pool — passed to repository structs in main.rs.
+    pub pool: deadpool_sqlite::Pool,
 }
 
-// This tiny block of boilerplate is necessary to index concurrent caches properly.
-// The result must always return each elements position in the iterator and this simple typecasting
-// is the easiest way to do it. It is checked for correctness and compared against the iterator
-// during startup.
-impl CacheIndex for Cache {
-    fn to_usize(self) -> usize {
-        self as usize
+impl RaftNode {
+    pub async fn start(
+        node_id: NodeId,
+        peers: Vec<(NodeId, Node)>,
+        data_dir: &str,
+    ) -> anyhow::Result<Arc<Self>> {
+        let log_path = format!("{data_dir}/raft-log");
+        let log_store = LogStore::open(&log_path)
+            .context("failed to open RocksDB log store")?;
+
+        let sqlite_path = format!("{data_dir}/state.db");
+        let pool = deadpool_sqlite::Config::new(&sqlite_path)
+            .create_pool(deadpool_sqlite::Runtime::Tokio1)
+            .context("failed to build SQLite pool")?;
+
+        let state_machine = StateMachine::new(pool.clone())
+            .await
+            .context("failed to initialise state machine")?;
+
+        let config = Arc::new(
+            Config::default()
+                .validate()
+                .expect("invalid openraft config"),
+        );
+
+        let network = NetworkFactory::new();
+
+        let raft = Raft::new(node_id, config, network, log_store, state_machine)
+            .await
+            .context("failed to start openraft")?;
+
+        if peers.is_empty() {
+            let members = BTreeMap::from([(
+                node_id,
+                Node {
+                    addr_raft: String::new(),
+                    addr_api: String::new(),
+                },
+            )]);
+            let _ = raft.initialize(members).await;
+        } else {
+            let members: BTreeMap<_, _> = peers.into_iter().collect();
+            let _ = raft.initialize(members).await;
+        }
+
+        Ok(Arc::new(Self { raft, node_id, pool }))
     }
-}
 
-async fn node_config(node_id: u64, nodes: Vec<Server>) -> NodeConfig {
-    let mut config = NodeConfig::from_toml("hiqlite.toml", None, None)
-        .await
-        .unwrap();
-    config.node_id = node_id;
-    config.nodes = nodes
-        .iter()
-        .map(|s| Node {
-            id: s.id,
-            addr_api: s.addr_api.clone(),
-            addr_raft: s.addr_raft.clone(),
-        })
-        .collect();
-    config.log_statements = false;
-    config.tls_raft = None;
-    config.tls_api = None;
-    config
-}
-
-pub async fn get_client(
-    args: Server,
-    data_dir: String,
-    nodes: Vec<Server>,
-) -> Result<Client, Error> {
-    let config = {
-        let mut config = node_config(args.id, nodes).await;
-
-        // to make this example work when starting all nodes on the same host,
-        // we need to save into custom folders for each one
-        config.data_dir = data_dir.into();
-        config
-    };
-    // Start the Raft node itself and get a client
-    // the auto_init setting will initialize the Raft cluster automatically and adds
-    // all given Nodes as members, as soon as they are all up and running
-
-    let client = start_node_with_cache::<Cache>(config).await?;
-
-    client.wait_until_healthy_cache().await;
-
-    client.wait_until_healthy_db().await;
-
-    Ok(client)
-}
-
-pub async fn init_tables(client: &Client) -> Result<(), Error> {
-    client.migrate::<Migrations>().await?;
-    client
-        .query_raw("PRAGMA journal_mode = WAL", params![])
-        .await?;
-    client
-        .query_raw("PRAGMA synchronous = NORMAL", params![])
-        .await?;
-    Ok(())
+    pub async fn is_leader(&self) -> bool {
+        self.raft.current_leader().await == Some(self.node_id)
+    }
 }

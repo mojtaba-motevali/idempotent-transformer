@@ -1,0 +1,125 @@
+namespace raft_net;
+
+table LogId {
+    leader_id: uint64;
+    index: uint64;
+}
+
+table Vote {
+    term: uint64;
+    node_id: uint64;
+    committed: bool;
+}
+
+table CmdCreateOrGetWorkflow {
+    workflow_id: string (required);
+    name: string;
+    created_at: int64;
+}
+
+table CmdIncrementFencingToken {
+    workflow_id: string (required);
+}
+
+table CmdUpsertCheckpoint {
+    workflow_id: string (required);
+    position: int64;
+    idempotency_key: string (required);
+    value: [ubyte];
+    created_at: int64;
+}
+
+table CmdCompleteWorkflow {
+    workflow_id: string (required);
+    expire_at: int64;
+    completed_at: int64;
+}
+
+table CmdDeleteExpired {
+    before_ms: int64;
+}
+
+union WorkflowCommand {
+    CmdCreateOrGetWorkflow,
+    CmdIncrementFencingToken,
+    CmdUpsertCheckpoint,
+    CmdCompleteWorkflow,
+    CmdDeleteExpired,
+}
+
+table BlankPayload {}
+
+table NormalPayload {
+    command_type: WorkflowCommand;
+}
+
+table MembershipPayload {
+    membership_json: string (required);
+}
+
+union EntryPayload {
+    BlankPayload,
+    NormalPayload,
+    MembershipPayload,
+}
+
+table Entry {
+    log_id: LogId;
+    payload_type: EntryPayload;
+}
+
+table AppendEntriesRequest {
+    vote: Vote (required);
+    prev_log_id: LogId;
+    entries: [Entry];
+    leader_commit: LogId;
+}
+
+table AppendEntriesResponse {
+    vote: Vote (required);
+    success: bool;
+    conflict_log_id: LogId;
+}
+
+table VoteRequest {
+    vote: Vote (required);
+    last_log_id: LogId;
+}
+
+table VoteResponse {
+    vote: Vote (required);
+    vote_granted: bool;
+}
+
+table SnapshotMeta {
+    last_log_id: LogId;
+    last_membership: string (required);
+    snapshot_id: string (required);
+}
+
+table InstallSnapshotRequest {
+    vote: Vote (required);
+    meta: SnapshotMeta (required);
+    offset: uint64;
+    data: [ubyte];
+    done: bool;
+}
+
+table InstallSnapshotResponse {
+    vote: Vote (required);
+}
+
+union RaftMessage {
+    AppendEntriesRequest,
+    AppendEntriesResponse,
+    VoteRequest,
+    VoteResponse,
+    InstallSnapshotRequest,
+    InstallSnapshotResponse,
+}
+
+table Envelope {
+    message_type: RaftMessage;
+}
+
+root_type Envelope;
