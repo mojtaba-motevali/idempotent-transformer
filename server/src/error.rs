@@ -2,9 +2,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum RepositoryError {
-    #[error("rocksdb error: {0}")]
-    RocksDb(#[from] rocksdb::Error),
-
     #[error("decode error: {0}")]
     Decode(String),
 }
@@ -65,4 +62,7 @@ pub enum NetworkError {
 
     #[error("unexpected message type: {0:#x}")]
     InvalidMessageType(u8),
+
+    #[error("connection lost: {0}")]
+    ConnectionLost(String),
 }

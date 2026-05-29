@@ -1,46 +1,23 @@
-use std::sync::Arc;
+use std::collections::HashSet;
 
-use rocksdb::{Direction, IteratorMode, DB};
 use tracing::instrument;
 
 use crate::{
     error::RepositoryError,
-    schema::checkpoint::Checkpoint,
-    storage::state_machine::CF_CHECKPOINTS,
+    schema::{checkpoint::Checkpoint, workflow::WorkflowStatus},
+    storage::state_machine::SharedStore,
 };
-
-use super::workflows::expired_workflow_ids;
 
 #[derive(Clone)]
 pub struct CheckpointRepository {
-    db: Arc<DB>,
+    store: SharedStore,
 }
 
 impl CheckpointRepository {
-    pub fn new(db: Arc<DB>) -> Self {
-        Self { db }
+    pub fn new(store: SharedStore) -> Self {
+        Self { store }
     }
 
-    fn cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(CF_CHECKPOINTS).unwrap()
-    }
-}
-
-/// Key encoding: `{workflow_id bytes} \x00 {position as 8-byte big-endian}`
-fn cp_key(workflow_id: &str, position: i64) -> Vec<u8> {
-    let mut key = workflow_id.as_bytes().to_vec();
-    key.push(0);
-    key.extend_from_slice(&position.to_be_bytes());
-    key
-}
-
-fn cp_prefix(workflow_id: &str) -> Vec<u8> {
-    let mut p = workflow_id.as_bytes().to_vec();
-    p.push(0);
-    p
-}
-
-impl CheckpointRepository {
     #[instrument(skip(self), fields(workflow_id, position), err)]
     pub async fn upsert(
         &self,
@@ -50,16 +27,17 @@ impl CheckpointRepository {
         value: Option<&[u8]>,
         created_at: i64,
     ) -> Result<(), RepositoryError> {
-        let cp = Checkpoint {
-            workflow_id: workflow_id.to_owned(),
-            position,
-            value: value.map(|v| v.to_vec()),
-            idempotency_key: idempotency_key.to_owned(),
-            created_at,
-        };
-        let bytes = serde_json::to_vec(&cp)
-            .map_err(|e| RepositoryError::Decode(e.to_string()))?;
-        self.db.put_cf(self.cf(), cp_key(workflow_id, position), bytes)?;
+        let mut store = self.store.lock();
+        store.checkpoints.insert(
+            (workflow_id.to_owned(), position),
+            Checkpoint {
+                workflow_id:     workflow_id.to_owned(),
+                position,
+                value:           value.map(<[u8]>::to_vec),
+                idempotency_key: idempotency_key.to_owned(),
+                created_at,
+            },
+        );
         Ok(())
     }
 
@@ -69,36 +47,32 @@ impl CheckpointRepository {
         workflow_id: &str,
         position: i64,
     ) -> Result<Option<Checkpoint>, RepositoryError> {
-        match self.db.get_cf(self.cf(), cp_key(workflow_id, position))? {
-            Some(bytes) => {
-                let cp = serde_json::from_slice(&bytes)
-                    .map_err(|e| RepositoryError::Decode(e.to_string()))?;
-                Ok(Some(cp))
-            }
-            None => Ok(None),
-        }
+        Ok(self
+            .store
+            .lock()
+            .checkpoints
+            .get(&(workflow_id.to_owned(), position))
+            .cloned())
     }
 
+    /// Deletes all checkpoints belonging to completed workflows whose
+    /// `expire_at` is before `before_ms`.  Acquires the store once for both
+    /// the expired-workflow scan and the checkpoint removal.
     #[instrument(skip(self), err)]
     pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError> {
-        let expired_ids = expired_workflow_ids(&self.db, before_ms)?;
-        let cf = self.cf();
-        let mut count = 0u64;
-        for workflow_id in &expired_ids {
-            let prefix = cp_prefix(workflow_id);
-            let iter = self.db.iterator_cf(
-                cf,
-                IteratorMode::From(&prefix, Direction::Forward),
-            );
-            for item in iter {
-                let (k, _) = item?;
-                if !k.starts_with(&prefix) {
-                    break;
-                }
-                self.db.delete_cf(cf, &k)?;
-                count += 1;
-            }
-        }
-        Ok(count)
+        let mut store = self.store.lock();
+        let expired: HashSet<String> = store
+            .workflows
+            .values()
+            .filter(|wf| {
+                wf.status == WorkflowStatus::Completed as i64
+                    && wf.expire_at.map_or(false, |e| e < before_ms)
+            })
+            .map(|wf| wf.id.clone())
+            .collect();
+
+        let before = store.checkpoints.len();
+        store.checkpoints.retain(|(wf_id, _), _| !expired.contains(wf_id));
+        Ok((before - store.checkpoints.len()) as u64)
     }
 }

@@ -61,82 +61,75 @@ Implements `RaftLogStorage<TypeConfig>` + `RaftLogReader<TypeConfig>`.
 
 ### `state_machine.rs` — `StateMachine`
 
+All application data lives in **RAM** inside a `SharedStore`:
+
 ```rust
-pub const CF_WORKFLOWS: &str      = "workflows";
-pub const CF_FENCING_TOKENS: &str = "fencing_tokens";
-pub const CF_CHECKPOINTS: &str    = "checkpoints";
-pub const CF_RAFT_META: &str      = "raft_meta";
+pub struct Store {
+    pub(crate) workflows:      HashMap<String, Workflow>,
+    pub(crate) fencing_tokens: HashMap<String, i64>,
+    pub(crate) checkpoints:    BTreeMap<(String, i64), Checkpoint>,
+}
 
-pub fn open_state_db(path: &str) -> Result<Arc<DB>, rocksdb::Error>
-// Opens (or creates) the state machine RocksDB with all 4 CFs.
+pub type SharedStore = Arc<parking_lot::Mutex<Store>>;
+```
 
+`StateMachine::new(data_dir: &str) -> anyhow::Result<(StateMachine, SharedStore)>`:
+- Tries to restore from `{data_dir}/snapshot.bin` (self-contained JSON file)
+- Returns `(StateMachine, SharedStore)` — the same `SharedStore` is handed to repositories
+
+```rust
 pub struct StateMachine {
-    db: Arc<DB>,
-    last_applied:    Arc<tokio::sync::Mutex<Option<LogId<u64>>>>,
-    last_membership: Arc<tokio::sync::Mutex<StoredMembership<u64, Node>>>,
+    store:           SharedStore,
+    last_applied:    parking_lot::Mutex<Option<LogId<u64>>>,
+    last_membership: parking_lot::Mutex<StoredMembership<u64, Node>>,
+    last_snapshot:   Arc<parking_lot::Mutex<Option<(SnapshotMeta<u64, Node>, Vec<u8>)>>>,
+    snapshot_path:   PathBuf,
 }
 ```
 
-Implements `RaftStateMachine<TypeConfig>`.
+**Mutex choice rule**: `parking_lot::Mutex` everywhere — all critical sections are inline
+in-memory operations with no `.await` while the lock is held.
 
-**`new(db: Arc<DB>) -> anyhow::Result<Self>`** (synchronous, no `.await` needed):
-1. Loads `last_applied` and `last_membership` from `CF_RAFT_META` (survives restarts)
-2. Initialises in-memory mutex state
+**`apply(entries)`** — per entry:
+- `Normal(cmd)` → `store.lock()` → `apply_command(&mut store, cmd)` → drop lock
+- `Membership(m)` → `last_membership.lock() = ...` (no store access)
+- Updates `last_applied.lock()` after each entry
 
-**`apply(entries)`**:
-- Creates `WorkflowRepository`, `CheckpointRepository`, `FencingTokenRepository` from `self.db`
-- For each entry: dispatches `WorkflowCommand` to the appropriate repo method
-- Persists `last_applied` to `CF_RAFT_META` after the batch
-- `Membership` entries update `last_membership` in memory + `CF_RAFT_META`
-
-**`apply_command` dispatch:**
+**`apply_command` dispatch (free function, synchronous):**
 ```
-CreateOrGetWorkflow   → WorkflowRepository::create_or_get   → WorkflowResponse::Empty
-IncrementFencingToken → FencingTokenRepository::increment    → WorkflowResponse::FencingToken(token)
-UpsertCheckpoint      → CheckpointRepository::upsert         → WorkflowResponse::Empty
-CompleteWorkflow      → WorkflowRepository::complete         → WorkflowResponse::Empty
-DeleteExpired         → tokio::join!(cp, ft, wf cleanup)     → WorkflowResponse::Empty (best-effort)
+CreateOrGetWorkflow   → HashMap::entry → insert or update name    → Empty
+IncrementFencingToken → HashMap::entry → and_modify(+1)/or_insert(1) → FencingToken(n)
+UpsertCheckpoint      → BTreeMap::insert                           → Empty
+CompleteWorkflow      → HashMap::get_mut → set status/expire_at    → Empty
+DeleteExpired         → collect expired IDs → remove all three maps → Empty
 ```
-
-**Helpers:**
-- `sm_err(e)` — wraps error into `StorageError::IO { source: StorageIOError::write_state_machine(...) }`
-- `put_meta(key, value)` — upserts a row in `CF_RAFT_META`
-- `load_meta_json::<T>(db, key)` — reads and deserialises from `CF_RAFT_META`
 
 **Snapshot** — `StateSnapshotBuilder`:
 
 ```rust
 pub struct StateSnapshotBuilder {
-    db: Arc<DB>,
-    last_applied:    Option<LogId<u64>>,
-    last_membership: StoredMembership<u64, Node>,
-    last_snapshot:   Arc<tokio::sync::Mutex<Option<(SnapshotMeta<u64, Node>, Vec<u8>)>>>,
+    // Point-in-time copy captured at get_snapshot_builder() time
+    snapshot_workflows:      Vec<Workflow>,
+    snapshot_fencing_tokens: Vec<(String, i64)>,
+    snapshot_checkpoints:    Vec<Checkpoint>,
+    last_applied:            Option<LogId<u64>>,
+    last_membership:         StoredMembership<u64, Node>,
+    last_snapshot: Arc<parking_lot::Mutex<...>>,
+    snapshot_path: PathBuf,
 }
 ```
 
-`build_snapshot()` serialises all three data CFs into `SnapshotContent`:
-```rust
-struct SnapshotContent {
-    workflows:      Vec<Workflow>,
-    fencing_tokens: Vec<(String, i64)>,
-    checkpoints:    Vec<Checkpoint>,
-}
-```
-Result is serde_json → `Cursor<Vec<u8>>`. Cached in `StateMachine.last_snapshot`.
+`get_snapshot_builder()`: locks store briefly to clone all data, then releases before
+reading `last_applied`/`last_membership`.
 
-`install_snapshot()`: clears `workflows`, `fencing_tokens`, `checkpoints` CFs, then restores from `SnapshotContent`, then persists `last_applied`/`last_membership` to `CF_RAFT_META`.
+`build_snapshot()`: serializes the pre-cloned data to serde_json, writes
+`snapshot_path`, updates `last_snapshot` cache. After this returns, openraft calls
+`LogStore::purge(meta.last_log_id)` to **vacuum committed log entries**.
 
-`get_current_snapshot()`: returns from `last_snapshot` cache (populated by `build_snapshot` or `install_snapshot`).
+`install_snapshot()`: parses JSON → locks store → clears+fills maps → unlocks →
+updates metadata locks → persists to `snapshot_path`.
 
-The `StateMachine` struct also holds `last_snapshot: Arc<Mutex<...>>` shared with the builder:
-```rust
-pub struct StateMachine {
-    db: Arc<DB>,
-    last_applied:    Arc<tokio::sync::Mutex<Option<LogId<u64>>>>,
-    last_membership: Arc<tokio::sync::Mutex<StoredMembership<u64, Node>>>,
-    last_snapshot:   Arc<tokio::sync::Mutex<Option<(SnapshotMeta<u64, Node>, Vec<u8>)>>>,
-}
-```
+`get_current_snapshot()`: returns from `last_snapshot` cache.
 
 ### `network.rs` — `NetworkFactory` + `Network` + `PeerConn`
 

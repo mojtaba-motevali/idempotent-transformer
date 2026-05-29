@@ -1,101 +1,94 @@
 # repositories/ — Data access layer
 
-All repository structs wrap an `Arc<rocksdb::DB>` (or `moka` cache for leases) and expose
-async methods returning `Result<T, RepositoryError>`.
+All repository structs wrap a `SharedStore` (`Arc<parking_lot::Mutex<Store>>`) and expose
+async methods returning `Result<T, RepositoryError>`.  The underlying data lives entirely
+in RAM inside the state machine's `Store` struct — no RocksDB in this layer.
 
 Every method is instrumented with `#[instrument(skip(self), fields(...), err)]`.
 
-## RocksDB schema (state machine DB at `{data_dir}/state`)
+## In-memory data layout (`Store`)
 
-| Column family | Key | Value |
-|---------------|-----|-------|
-| `workflows` | `workflow_id` (UTF-8 bytes) | serde_json `Workflow` |
-| `fencing_tokens` | `workflow_id` (UTF-8 bytes) | 8-byte big-endian `i64` |
-| `checkpoints` | `{workflow_id bytes}\x00{position 8-byte BE}` | serde_json `Checkpoint` |
-| `raft_meta` | key string bytes | serde_json value (used by StateMachine only) |
+| Field | Type | Key |
+|-------|------|-----|
+| `workflows` | `HashMap<String, Workflow>` | `workflow_id` |
+| `fencing_tokens` | `HashMap<String, i64>` | `workflow_id` |
+| `checkpoints` | `BTreeMap<(String, i64), Checkpoint>` | `(workflow_id, position)` |
 
-The null-byte separator in checkpoint keys allows prefix scanning by `workflow_id`
-(a workflow ID never contains a null byte).
+`Store` is defined in `storage::state_machine` and protected by a `parking_lot::Mutex`.
 
-CF names are defined as constants in `storage::state_machine`:
-`CF_WORKFLOWS`, `CF_FENCING_TOKENS`, `CF_CHECKPOINTS`, `CF_RAFT_META`.
+## Mutex discipline
+
+All repository methods lock `SharedStore` for the duration of the in-memory operation
+(HashMap/BTreeMap read or write) and release before returning.  No `.await` is held
+across the lock — `parking_lot::Mutex` (sync, non-poisoning) is appropriate.
 
 ## Files
 
 ### `workflows.rs` — `WorkflowRepository`
 
 ```rust
-pub struct WorkflowRepository { db: Arc<DB> }
+pub struct WorkflowRepository { store: SharedStore }
 impl WorkflowRepository {
-    pub fn new(db: Arc<DB>) -> Self
+    pub fn new(store: SharedStore) -> Self
 
     pub async fn create_or_get(
         &self, workflow_id: &str, name: Option<&str>, created_at: i64,
     ) -> Result<Workflow, RepositoryError>
-    // get → if exists update name and return; else put new Workflow
+    // HashMap::entry → Occupied: optionally update name; Vacant: insert new Workflow
 
     pub async fn get_by_id(&self, workflow_id: &str) -> Result<Option<Workflow>, RepositoryError>
-    // get_cf(CF_WORKFLOWS, workflow_id)
+    // store.workflows.get(workflow_id).cloned()
 
     pub async fn complete(
         &self, workflow_id: &str, expire_at: i64, completed_at: i64,
     ) -> Result<(), RepositoryError>
-    // get → mutate status/expire_at/completed_at → put
+    // get_mut → set status = Completed, expire_at, completed_at
 
     pub async fn delete_expired(&self, before_ms: i64) -> Result<u64, RepositoryError>
-    // iterate CF_WORKFLOWS, delete Completed entries with expire_at < before_ms
+    // collect expired IDs → remove from store.workflows
 }
 ```
-
-**`expired_workflow_ids(db, before_ms) -> Result<Vec<String>, RepositoryError>`**
-`pub(crate)` free function — iterates `CF_WORKFLOWS`, returns IDs of `Completed`
-workflows with `expire_at < before_ms`. Used by all three cleanup methods.
 
 ### `checkpoints.rs` — `CheckpointRepository`
 
 ```rust
-pub struct CheckpointRepository { db: Arc<DB> }
+pub struct CheckpointRepository { store: SharedStore }
 impl CheckpointRepository {
-    pub fn new(db: Arc<DB>) -> Self
+    pub fn new(store: SharedStore) -> Self
 
     pub async fn upsert(
         &self, workflow_id, position, idempotency_key, value: Option<&[u8]>, created_at,
     ) -> Result<(), RepositoryError>
-    // put_cf(CF_CHECKPOINTS, cp_key(wf_id, pos), json(Checkpoint))
+    // BTreeMap::insert((workflow_id, position), Checkpoint { ... })
     // Idempotent: same key overwrites the value
 
     pub async fn get(&self, workflow_id, position) -> Result<Option<Checkpoint>, RepositoryError>
-    // get_cf(CF_CHECKPOINTS, cp_key(wf_id, pos))
+    // BTreeMap::get(&(workflow_id, position)).cloned()
 
-    pub async fn delete_for_completed(&self, before_ms) -> Result<u64, RepositoryError>
-    // 1. expired_workflow_ids(db, before_ms)
-    // 2. For each expired id: prefix-scan CF_CHECKPOINTS by cp_prefix(id), delete all
+    pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError>
+    // 1. Scan store.workflows for expired IDs (same lock)
+    // 2. BTreeMap::retain to remove all matching checkpoints
 }
 ```
-
-Checkpoint key format: `{workflow_id_bytes} ++ [0x00] ++ {position.to_be_bytes()}`.
-Prefix = `{workflow_id_bytes} ++ [0x00]` (all checkpoints for a workflow share this prefix).
 
 ### `workflows_fencing_tokens.rs` — `FencingTokenRepository`
 
 ```rust
-pub struct FencingTokenRepository { db: Arc<DB> }
+pub struct FencingTokenRepository { store: SharedStore }
 impl FencingTokenRepository {
-    pub fn new(db: Arc<DB>) -> Self
+    pub fn new(store: SharedStore) -> Self
 
     pub async fn increment(&self, workflow_id) -> Result<i64, RepositoryError>
-    // get current (default 0) → +1 → put as 8-byte BE → return new value
-    // Safe without a transaction: StateMachine::apply() is single-writer
+    // HashMap::entry → and_modify(+1) / or_insert(1)
+    // Safe: store lock serializes all writers
 
     pub async fn get(&self, workflow_id) -> Result<Option<i64>, RepositoryError>
-    // get_cf(CF_FENCING_TOKENS, workflow_id) → decode 8-byte BE i64
+    // store.fencing_tokens.get(workflow_id).copied()
 
-    pub async fn delete_for_completed(&self, before_ms) -> Result<u64, RepositoryError>
-    // expired_workflow_ids(db, before_ms) → delete each from CF_FENCING_TOKENS
+    pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError>
+    // Scan store.workflows for expired IDs → remove from store.fencing_tokens (same lock)
 }
 ```
-
-Fencing tokens are stored as raw 8-byte big-endian `i64`, not JSON.
 
 ### `lease_checkpoint.rs` — `LeaseRepository`
 
@@ -123,23 +116,24 @@ impl LeaseRepository {
 
 ```rust
 pub enum RepositoryError {
-    RocksDb(#[from] rocksdb::Error),   // DB read/write failures
-    Decode(String),                     // serde_json or byte-decode failures
+    Decode(String),  // serde_json decode failures (e.g., in snapshot restore)
 }
 ```
 
-No `??` double-unwrap needed (RocksDB calls return `Result<T, rocksdb::Error>` directly).
+In-memory HashMap/BTreeMap operations are infallible, so `RepositoryError` is only
+produced by explicit decode paths; most methods simply return `Ok(...)`.
 
 ## Concurrency
 
-All repo methods are called from `StateMachine::apply()` (single-writer, sequential) for
-write operations. Read operations (`get_by_id`, `get`, `FencingTokenRepository::get`) can
-be called concurrently from service layer. RocksDB is thread-safe for concurrent reads.
+- **Write path**: `StateMachine::apply()` (Raft, sequential) + direct service-layer writes
+  (`CheckpointService::checkpoint` → `CheckpointRepository::upsert`).
+- **Read path**: service layer reads concurrently. Parking_lot lock is uncontended on reads.
+- Cleanup (`delete_for_completed`, `delete_expired`): acquires the store once per call,
+  scanning workflows and deleting in the same critical section — consistent, no TOCTOU.
 
 ## Dependencies
 
-- `error::RepositoryError`
+- `storage::state_machine::SharedStore`
 - `schema::{Workflow, WorkflowStatus, Checkpoint, LeasedCheckpointValue}`
-- `storage::state_machine::{CF_WORKFLOWS, CF_FENCING_TOKENS, CF_CHECKPOINTS}`
-- `rocksdb::{DB, IteratorMode, Direction}`
-- `moka::future::Cache`
+- `error::RepositoryError`
+- `moka::future::Cache` (lease only)

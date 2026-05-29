@@ -8,7 +8,6 @@ pub type NodeId = u64;
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Node {
     pub addr_raft: String,
-    pub addr_api: String,
 }
 
 declare_raft_types!(

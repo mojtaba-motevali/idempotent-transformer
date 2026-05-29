@@ -46,9 +46,10 @@ impl TcpRaftServer {
     /// Process all messages on a single accepted connection until it closes.
     async fn handle_conn(&self, mut stream: TcpStream) -> Result<(), NetworkError> {
         loop {
-            let req_bytes = read_framed(&mut stream).await?;
+            let (req_id, req_bytes) = read_framed(&mut stream).await?;
             let resp_bytes = self.dispatch(&req_bytes).await?;
-            write_framed(&mut stream, &resp_bytes).await?;
+            // Echo req_id so the client's reader task can route the response.
+            write_framed(&mut stream, req_id, &resp_bytes).await?;
         }
     }
 

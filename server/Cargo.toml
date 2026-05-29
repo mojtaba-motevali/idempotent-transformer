@@ -12,7 +12,7 @@ path = "src/main.rs"
 openraft = { version = "0.9", features = ["serde", "storage-v2"] }
 
 # Raft log store
-rocksdb = "0.22"
+fjall = "2"
 
 # Lease cache (TTL, async, no manual sweep)
 moka = { version = "0.12", features = ["future"] }

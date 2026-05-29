@@ -3,20 +3,19 @@ use std::sync::Arc;
 
 use anyhow::Context as _;
 use openraft::{Config, Raft};
-use rocksdb::DB;
 
 use crate::storage::{
     log_store::LogStore,
     network::NetworkFactory,
-    state_machine::{open_state_db, StateMachine},
+    state_machine::{SharedStore, StateMachine},
     type_config::{Node, NodeId, TypeConfig},
 };
 
 pub struct RaftNode {
-    pub raft: Raft<TypeConfig>,
-    pub node_id: NodeId,
-    /// State machine DB — shared with repository structs in main.rs.
-    pub db: Arc<DB>,
+    pub raft:     Raft<TypeConfig>,
+    pub node_id:  NodeId,
+    /// In-memory application state — shared with repository structs.
+    pub store:    SharedStore,
 }
 
 impl RaftNode {
@@ -26,18 +25,24 @@ impl RaftNode {
         data_dir: &str,
     ) -> anyhow::Result<Arc<Self>> {
         let log_store = LogStore::open(&format!("{data_dir}/raft-log"))
-            .context("failed to open RocksDB log store")?;
+            .context("failed to open fjall log store")?;
 
-        let db = open_state_db(&format!("{data_dir}/state"))
-            .context("failed to open RocksDB state machine")?;
-
-        let state_machine = StateMachine::new(db.clone())
-            .context("failed to initialise state machine")?;
+        let (state_machine, store) =
+            StateMachine::new(&format!("{data_dir}/state"))
+                .context("failed to initialise in-memory state machine")?;
 
         let config = Arc::new(
-            Config::default()
-                .validate()
-                .expect("invalid openraft config"),
+            Config {
+                // Heartbeat every 500 ms.  Election only triggers after 10–20×
+                // that interval, giving plenty of margin for fsync latency and
+                // OS scheduling jitter.
+                heartbeat_interval:    500,
+                election_timeout_min:  5_000,
+                election_timeout_max: 10_000,
+                ..Default::default()
+            }
+            .validate()
+            .expect("invalid openraft config"),
         );
 
         let raft = Raft::new(
@@ -53,10 +58,7 @@ impl RaftNode {
         if peers.is_empty() {
             let members = BTreeMap::from([(
                 node_id,
-                Node {
-                    addr_raft: String::new(),
-                    addr_api: String::new(),
-                },
+                Node { addr_raft: String::new() },
             )]);
             let _ = raft.initialize(members).await;
         } else {
@@ -64,7 +66,7 @@ impl RaftNode {
             let _ = raft.initialize(members).await;
         }
 
-        Ok(Arc::new(Self { raft, node_id, db }))
+        Ok(Arc::new(Self { raft, node_id, store }))
     }
 
     pub async fn is_leader(&self) -> bool {

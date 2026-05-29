@@ -66,7 +66,7 @@ impl WorkflowService {
         let created_at = Utc::now().timestamp_millis();
 
         let (workflow_res, token_res) = tokio::join!(
-            self.raft.client_write(WorkflowCommand::CreateOrGetWorkflow {
+            self.raft.client_write_ff(WorkflowCommand::CreateOrGetWorkflow {
                 workflow_id: workflow_id.to_owned(),
                 name: name.map(str::to_owned),
                 created_at,
@@ -112,7 +112,7 @@ impl WorkflowService {
         let expire_at = now + input.expire_after;
 
         self.raft
-            .client_write(WorkflowCommand::CompleteWorkflow {
+            .client_write_ff(WorkflowCommand::CompleteWorkflow {
                 workflow_id: input.workflow_id,
                 expire_at,
                 completed_at: now,

@@ -1,45 +1,43 @@
-# === Build Stage ===
-FROM rust:1.88.0-alpine AS builder
+# ── Build Stage ───────────────────────────────────────────────────────────────
+FROM rust:1.88-bookworm AS builder
 
 WORKDIR /app
 
-# Install required build tools
-RUN apk add --no-cache musl-dev build-base protobuf
+# protobuf-compiler  → tonic gRPC codegen
+# fjall is pure Rust — no cmake/clang/libclang needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
 
-# Pre-cache dependencies to speed up rebuilds
+# Pre-cache Cargo dependencies (layer reused unless Cargo.toml/lock changes)
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-RUN rm -r src
+RUN mkdir src && echo "fn main() {}" > src/main.rs \
+    && cargo build --release 2>/dev/null || true \
+    && rm -rf src
 
-# Copy full source
+# Build the real binary
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
-COPY build.rs .
+COPY build.rs ./
 COPY proto ./proto
+COPY flatbuffers ./flatbuffers
 
-# Compile the application
 RUN cargo build --release
 
-COPY hiqlite.toml .
+# ── Runtime Stage ─────────────────────────────────────────────────────────────
+FROM debian:bookworm-slim
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# === Runtime Stage ===
-FROM alpine:3.20
-
-
-# Install only needed runtime dependencies (if any)
-RUN apk add --no-cache libstdc++ # required if app links dynamically to libstdc++
-
-# Create a non-root user (optional but recommended)
-RUN addgroup -S app && adduser -S app -G app
+RUN groupadd -r app && useradd -r -g app app
 USER app
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/idempotency-server .
-COPY --from=builder /app/hiqlite.toml .
-COPY --from=builder /app/migrations migrations
+COPY --from=builder /app/target/release/idempotency-server ./idempotency-server
+COPY --from=builder /app/migrations ./migrations
 
 ENTRYPOINT ["./idempotency-server"]

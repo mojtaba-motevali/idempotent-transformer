@@ -1,4 +1,6 @@
+use std::collections::{BTreeMap, HashMap, hash_map::Entry as HEntry};
 use std::io::ErrorKind;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use openraft::{
@@ -6,39 +8,59 @@ use openraft::{
     StorageIOError, StoredMembership,
 };
 use openraft::storage::RaftStateMachine;
-use rocksdb::{ColumnFamilyDescriptor, IteratorMode, Options, DB};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 
-use crate::repositories::{
-    checkpoints::CheckpointRepository,
-    workflows::WorkflowRepository,
-    workflows_fencing_tokens::FencingTokenRepository,
+use crate::schema::{
+    checkpoint::Checkpoint,
+    workflow::{Workflow, WorkflowStatus},
 };
-use crate::schema::{checkpoint::Checkpoint, workflow::Workflow};
 use crate::storage::command::{WorkflowCommand, WorkflowResponse};
 use crate::storage::type_config::{Node, TypeConfig};
 
-// ── Column family names ───────────────────────────────────────────────────────
+// ── Application data store ─────────────────────────────────────────────────
 
-pub const CF_WORKFLOWS: &str = "workflows";
-pub const CF_FENCING_TOKENS: &str = "fencing_tokens";
-pub const CF_CHECKPOINTS: &str = "checkpoints";
-pub const CF_RAFT_META: &str = "raft_meta";
-
-// ── Snapshot content ──────────────────────────────────────────────────────────
-
-/// Full state machine snapshot: all data + Raft metadata.
-#[derive(Serialize, Deserialize)]
-struct SnapshotContent {
-    workflows: Vec<Workflow>,
-    fencing_tokens: Vec<(String, i64)>,
-    checkpoints: Vec<Checkpoint>,
+/// All application state held in RAM.
+///
+/// Key layout:
+///   workflows:      workflow_id  → Workflow
+///   fencing_tokens: workflow_id  → monotonic i64
+///   checkpoints:    (workflow_id, position) → Checkpoint  (BTreeMap for ordered prefix scan)
+pub struct Store {
+    pub(crate) workflows:      HashMap<String, Workflow>,
+    pub(crate) fencing_tokens: HashMap<String, i64>,
+    pub(crate) checkpoints:    BTreeMap<(String, i64), Checkpoint>,
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+impl Store {
+    fn new() -> Self {
+        Self {
+            workflows:      HashMap::new(),
+            fencing_tokens: HashMap::new(),
+            checkpoints:    BTreeMap::new(),
+        }
+    }
+}
 
-/// Wraps any error into a state-machine `StorageError`.
+/// Arc-wrapped, parking_lot-protected store shared between the state machine
+/// and the repository layer.
+pub type SharedStore = Arc<Mutex<Store>>;
+
+// ── Snapshot content ───────────────────────────────────────────────────────
+
+/// JSON-serializable representation of the full state machine snapshot.
+/// Raft metadata is embedded so the file is self-contained on restart.
+#[derive(Serialize, Deserialize)]
+struct SnapshotContent {
+    workflows:       Vec<Workflow>,
+    fencing_tokens:  Vec<(String, i64)>,
+    checkpoints:     Vec<Checkpoint>,
+    last_applied:    Option<LogId<u64>>,
+    last_membership: StoredMembership<u64, Node>,
+}
+
+// ── Error helper ───────────────────────────────────────────────────────────
+
 fn sm_err(e: &dyn std::error::Error) -> StorageError<u64> {
     StorageError::IO {
         source: StorageIOError::write_state_machine(&std::io::Error::new(
@@ -48,202 +70,121 @@ fn sm_err(e: &dyn std::error::Error) -> StorageError<u64> {
     }
 }
 
-/// Checkpoint key: `{workflow_id bytes} \x00 {position as 8-byte big-endian}`.
-fn cp_key(workflow_id: &str, position: i64) -> Vec<u8> {
-    let mut key = workflow_id.as_bytes().to_vec();
-    key.push(0);
-    key.extend_from_slice(&position.to_be_bytes());
-    key
-}
+// ── Command application ────────────────────────────────────────────────────
 
-/// Reads all three data column families and returns a serialisable snapshot.
-fn collect_snapshot_content(db: &DB) -> Result<SnapshotContent, StorageError<u64>> {
-    let mut workflows = Vec::new();
-    let cf = db.cf_handle(CF_WORKFLOWS).unwrap();
-    for item in db.iterator_cf(cf, IteratorMode::Start) {
-        let (_, v) = item.map_err(|e| sm_err(&e))?;
-        let wf: Workflow = serde_json::from_slice(&v)
-            .map_err(|e| sm_err(&e))?;
-        workflows.push(wf);
-    }
-
-    let mut fencing_tokens = Vec::new();
-    let cf = db.cf_handle(CF_FENCING_TOKENS).unwrap();
-    for item in db.iterator_cf(cf, IteratorMode::Start) {
-        let (k, v) = item.map_err(|e| sm_err(&e))?;
-        let workflow_id = String::from_utf8(k.to_vec())
-            .map_err(|e| sm_err(&e))?;
-        let token = v.as_ref()
-            .try_into()
-            .map(i64::from_be_bytes)
-            .map_err(|_| StorageError::IO {
-                source: StorageIOError::write_state_machine(&std::io::Error::new(
-                    ErrorKind::Other,
-                    "fencing token: invalid byte length",
-                )),
-            })?;
-        fencing_tokens.push((workflow_id, token));
-    }
-
-    let mut checkpoints = Vec::new();
-    let cf = db.cf_handle(CF_CHECKPOINTS).unwrap();
-    for item in db.iterator_cf(cf, IteratorMode::Start) {
-        let (_, v) = item.map_err(|e| sm_err(&e))?;
-        let cp: Checkpoint = serde_json::from_slice(&v)
-            .map_err(|e| sm_err(&e))?;
-        checkpoints.push(cp);
-    }
-
-    Ok(SnapshotContent { workflows, fencing_tokens, checkpoints })
-}
-
-/// Clears all entries from a column family.
-fn clear_cf(db: &DB, cf_name: &str) -> Result<(), StorageError<u64>> {
-    let cf = db.cf_handle(cf_name).unwrap();
-    let keys: Vec<_> = db
-        .iterator_cf(cf, IteratorMode::Start)
-        .map(|item| item.map(|(k, _)| k))
-        .collect::<Result<_, _>>()
-        .map_err(|e| sm_err(&e))?;
-    for k in keys {
-        db.delete_cf(cf, &k).map_err(|e| sm_err(&e))?;
-    }
-    Ok(())
-}
-
-// ── DB open ───────────────────────────────────────────────────────────────────
-
-pub fn open_state_db(path: &str) -> Result<Arc<DB>, rocksdb::Error> {
-    let mut opts = Options::default();
-    opts.create_if_missing(true);
-    opts.create_missing_column_families(true);
-
-    let cfs = vec![
-        ColumnFamilyDescriptor::new(CF_WORKFLOWS, Options::default()),
-        ColumnFamilyDescriptor::new(CF_FENCING_TOKENS, Options::default()),
-        ColumnFamilyDescriptor::new(CF_CHECKPOINTS, Options::default()),
-        ColumnFamilyDescriptor::new(CF_RAFT_META, Options::default()),
-    ];
-
-    let db = DB::open_cf_descriptors(&opts, path, cfs)?;
-    Ok(Arc::new(db))
-}
-
-// ── StateMachine ──────────────────────────────────────────────────────────────
-
-pub struct StateMachine {
-    db: Arc<DB>,
-    last_applied: Arc<Mutex<Option<LogId<u64>>>>,
-    last_membership: Arc<Mutex<StoredMembership<u64, Node>>>,
-    last_snapshot: Arc<Mutex<Option<(SnapshotMeta<u64, Node>, Vec<u8>)>>>,
-}
-
-impl StateMachine {
-    pub fn new(db: Arc<DB>) -> anyhow::Result<Self> {
-        let last_applied =
-            Self::load_meta_json::<Option<LogId<u64>>>(&db, "last_applied")?.unwrap_or(None);
-        let last_membership =
-            Self::load_meta_json::<StoredMembership<u64, Node>>(&db, "last_membership")?
-                .unwrap_or_default();
-
-        Ok(Self {
-            db,
-            last_applied: Arc::new(Mutex::new(last_applied)),
-            last_membership: Arc::new(Mutex::new(last_membership)),
-            last_snapshot: Arc::new(Mutex::new(None)),
-        })
-    }
-
-    fn meta_cf(db: &DB) -> &rocksdb::ColumnFamily {
-        db.cf_handle(CF_RAFT_META).unwrap()
-    }
-
-    fn load_meta_json<T: serde::de::DeserializeOwned>(
-        db: &DB,
-        key: &str,
-    ) -> anyhow::Result<Option<T>> {
-        match db.get_cf(Self::meta_cf(db), key.as_bytes())? {
-            Some(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
-            None => Ok(None),
+/// Applies one Raft command to the in-memory store.  Pure and synchronous —
+/// the caller holds a `parking_lot::MutexGuard<Store>` for the duration.
+fn apply_command(store: &mut Store, cmd: WorkflowCommand) -> WorkflowResponse {
+    match cmd {
+        WorkflowCommand::CreateOrGetWorkflow { workflow_id, name, created_at } => {
+            match store.workflows.entry(workflow_id) {
+                HEntry::Occupied(mut o) => {
+                    if name.is_some() {
+                        o.get_mut().name = name;
+                    }
+                }
+                HEntry::Vacant(v) => {
+                    let id = v.key().clone();
+                    v.insert(Workflow {
+                        id,
+                        status: WorkflowStatus::Running as i64,
+                        name,
+                        expire_at: None,
+                        completed_at: None,
+                        created_at,
+                    });
+                }
+            }
+            WorkflowResponse::Empty
         }
-    }
 
-    async fn put_meta(&self, key: &str, value: String) -> Result<(), StorageError<u64>> {
-        let cf = Self::meta_cf(&self.db);
-        self.db
-            .put_cf(cf, key.as_bytes(), value.as_bytes())
-            .map_err(|e| sm_err(&e))
-    }
+        WorkflowCommand::IncrementFencingToken { workflow_id } => {
+            let token = store
+                .fencing_tokens
+                .entry(workflow_id)
+                .and_modify(|t| *t += 1)
+                .or_insert(1);
+            WorkflowResponse::FencingToken(*token)
+        }
 
-    async fn apply_command(
-        &self,
-        cmd: WorkflowCommand,
-        wf: &WorkflowRepository,
-        cp: &CheckpointRepository,
-        ft: &FencingTokenRepository,
-    ) -> Result<WorkflowResponse, StorageError<u64>> {
-        match cmd {
-            WorkflowCommand::CreateOrGetWorkflow { workflow_id, name, created_at } => {
-                wf.create_or_get(&workflow_id, name.as_deref(), created_at)
-                    .await
-                    .map_err(|e| sm_err(&e))?;
-                Ok(WorkflowResponse::Empty)
+        WorkflowCommand::UpsertCheckpoint {
+            workflow_id,
+            position,
+            idempotency_key,
+            value,
+            created_at,
+        } => {
+            store.checkpoints.insert(
+                (workflow_id.clone(), position),
+                Checkpoint { workflow_id, position, value, idempotency_key, created_at },
+            );
+            WorkflowResponse::Empty
+        }
+
+        WorkflowCommand::CompleteWorkflow { workflow_id, expire_at, completed_at } => {
+            if let Some(wf) = store.workflows.get_mut(&workflow_id) {
+                wf.status = WorkflowStatus::Completed as i64;
+                wf.expire_at = Some(expire_at);
+                wf.completed_at = Some(completed_at);
+            }
+            WorkflowResponse::Empty
+        }
+
+        WorkflowCommand::DeleteExpired { before_ms } => {
+            let expired: Vec<String> = store
+                .workflows
+                .values()
+                .filter(|wf| {
+                    wf.status == WorkflowStatus::Completed as i64
+                        && wf.expire_at.map_or(false, |e| e < before_ms)
+                })
+                .map(|wf| wf.id.clone())
+                .collect();
+
+            for id in &expired {
+                store.workflows.remove(id);
+                store.fencing_tokens.remove(id);
             }
 
-            WorkflowCommand::IncrementFencingToken { workflow_id } => {
-                let token = ft.increment(&workflow_id).await.map_err(|e| sm_err(&e))?;
-                Ok(WorkflowResponse::FencingToken(token))
-            }
+            let expired_set: std::collections::HashSet<&str> =
+                expired.iter().map(String::as_str).collect();
+            store
+                .checkpoints
+                .retain(|(wf_id, _), _| !expired_set.contains(wf_id.as_str()));
 
-            WorkflowCommand::UpsertCheckpoint {
-                workflow_id,
-                position,
-                idempotency_key,
-                value,
-                created_at,
-            } => {
-                cp.upsert(&workflow_id, position, &idempotency_key, value.as_deref(), created_at)
-                    .await
-                    .map_err(|e| sm_err(&e))?;
-                Ok(WorkflowResponse::Empty)
-            }
-
-            WorkflowCommand::CompleteWorkflow { workflow_id, expire_at, completed_at } => {
-                wf.complete(&workflow_id, expire_at, completed_at)
-                    .await
-                    .map_err(|e| sm_err(&e))?;
-                Ok(WorkflowResponse::Empty)
-            }
-
-            WorkflowCommand::DeleteExpired { before_ms } => {
-                let (r1, r2, r3) = tokio::join!(
-                    cp.delete_for_completed(before_ms),
-                    ft.delete_for_completed(before_ms),
-                    wf.delete_expired(before_ms),
-                );
-                if let Err(e) = r1 { tracing::warn!(err = %e, "checkpoint cleanup error"); }
-                if let Err(e) = r2 { tracing::warn!(err = %e, "fencing token cleanup error"); }
-                if let Err(e) = r3 { tracing::warn!(err = %e, "workflow cleanup error"); }
-                Ok(WorkflowResponse::Empty)
-            }
+            WorkflowResponse::Empty
         }
     }
 }
 
-// ── SnapshotBuilder ───────────────────────────────────────────────────────────
+// ── SnapshotBuilder ────────────────────────────────────────────────────────
 
+/// Holds a consistent point-in-time copy of the store captured at
+/// `get_snapshot_builder()` time.  `build_snapshot()` serializes it and
+/// writes the file — no store lock needed.
 pub struct StateSnapshotBuilder {
-    db: Arc<DB>,
-    last_applied: Option<LogId<u64>>,
-    last_membership: StoredMembership<u64, Node>,
+    snapshot_workflows:      Vec<Workflow>,
+    snapshot_fencing_tokens: Vec<(String, i64)>,
+    snapshot_checkpoints:    Vec<Checkpoint>,
+    last_applied:            Option<LogId<u64>>,
+    last_membership:         StoredMembership<u64, Node>,
+    /// Shared with `StateMachine` so `get_current_snapshot()` sees the result.
     last_snapshot: Arc<Mutex<Option<(SnapshotMeta<u64, Node>, Vec<u8>)>>>,
+    snapshot_path: PathBuf,
 }
 
 impl RaftSnapshotBuilder<TypeConfig> for StateSnapshotBuilder {
     async fn build_snapshot(
         &mut self,
     ) -> Result<openraft::Snapshot<TypeConfig>, StorageError<u64>> {
-        let content = collect_snapshot_content(&self.db)?;
+        let content = SnapshotContent {
+            workflows:       self.snapshot_workflows.clone(),
+            fencing_tokens:  self.snapshot_fencing_tokens.clone(),
+            checkpoints:     self.snapshot_checkpoints.clone(),
+            last_applied:    self.last_applied,
+            last_membership: self.last_membership.clone(),
+        };
+
         let bytes = serde_json::to_vec(&content).map_err(|e| sm_err(&e))?;
 
         let snapshot_id = self
@@ -252,12 +193,16 @@ impl RaftSnapshotBuilder<TypeConfig> for StateSnapshotBuilder {
             .unwrap_or_else(|| "snap-0".to_string());
 
         let meta = SnapshotMeta {
-            last_log_id: self.last_applied,
+            last_log_id:     self.last_applied,
             last_membership: self.last_membership.clone(),
             snapshot_id,
         };
 
-        *self.last_snapshot.lock().await = Some((meta.clone(), bytes.clone()));
+        // Persist to disk.  After this returns successfully, openraft calls
+        // LogStore::purge(meta.last_log_id) to vacuum committed log entries.
+        std::fs::write(&self.snapshot_path, &bytes).map_err(|e| sm_err(&e))?;
+
+        *self.last_snapshot.lock() = Some((meta.clone(), bytes.clone()));
 
         Ok(openraft::Snapshot {
             meta,
@@ -266,7 +211,97 @@ impl RaftSnapshotBuilder<TypeConfig> for StateSnapshotBuilder {
     }
 }
 
-// ── RaftStateMachine impl ─────────────────────────────────────────────────────
+// ── StateMachine ───────────────────────────────────────────────────────────
+
+pub struct StateMachine {
+    store:           SharedStore,
+    /// Updated after every applied entry — inline write, no await while held.
+    last_applied:    Mutex<Option<LogId<u64>>>,
+    /// Updated for Membership entries — inline write, no await while held.
+    last_membership: Mutex<StoredMembership<u64, Node>>,
+    /// Shared with `StateSnapshotBuilder` via `Arc`.
+    last_snapshot:   Arc<Mutex<Option<(SnapshotMeta<u64, Node>, Vec<u8>)>>>,
+    snapshot_path:   PathBuf,
+}
+
+impl StateMachine {
+    /// Initialises the state machine, restoring from `{data_dir}/snapshot.bin`
+    /// if present.  Returns `(StateMachine, SharedStore)` — the store handle
+    /// is what repositories receive.
+    pub fn new(data_dir: &str) -> anyhow::Result<(Self, SharedStore)> {
+        let snapshot_path = PathBuf::from(data_dir).join("snapshot.bin");
+        std::fs::create_dir_all(data_dir)?;
+
+        let mut store = Store::new();
+        let mut last_applied: Option<LogId<u64>> = None;
+        let mut last_membership = StoredMembership::default();
+        let mut cached_snapshot: Option<(SnapshotMeta<u64, Node>, Vec<u8>)> = None;
+
+        if snapshot_path.exists() {
+            match std::fs::read(&snapshot_path) {
+                Ok(bytes) => match serde_json::from_slice::<SnapshotContent>(&bytes) {
+                    Ok(content) => {
+                        for wf in content.workflows {
+                            store.workflows.insert(wf.id.clone(), wf);
+                        }
+                        for (id, token) in content.fencing_tokens {
+                            store.fencing_tokens.insert(id, token);
+                        }
+                        for cp in content.checkpoints {
+                            store
+                                .checkpoints
+                                .insert((cp.workflow_id.clone(), cp.position), cp);
+                        }
+                        last_applied   = content.last_applied;
+                        last_membership = content.last_membership;
+
+                        let snapshot_id = last_applied
+                            .map(|l| format!("snap-{}", l.index))
+                            .unwrap_or_else(|| "snap-0".to_string());
+                        let meta = SnapshotMeta {
+                            last_log_id:     last_applied,
+                            last_membership: last_membership.clone(),
+                            snapshot_id,
+                        };
+                        cached_snapshot = Some((meta, bytes));
+                        tracing::info!(
+                            last_applied = ?last_applied,
+                            "state machine restored from snapshot"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            err = %e,
+                            path = %snapshot_path.display(),
+                            "snapshot file is unreadable, starting fresh"
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        err = %e,
+                        path = %snapshot_path.display(),
+                        "could not read snapshot file, starting fresh"
+                    );
+                }
+            }
+        }
+
+        let shared_store = Arc::new(Mutex::new(store));
+
+        let sm = Self {
+            store:           shared_store.clone(),
+            last_applied:    Mutex::new(last_applied),
+            last_membership: Mutex::new(last_membership),
+            last_snapshot:   Arc::new(Mutex::new(cached_snapshot)),
+            snapshot_path,
+        };
+
+        Ok((sm, shared_store))
+    }
+}
+
+// ── RaftStateMachine impl ──────────────────────────────────────────────────
 
 impl RaftStateMachine<TypeConfig> for StateMachine {
     type SnapshotBuilder = StateSnapshotBuilder;
@@ -274,9 +309,7 @@ impl RaftStateMachine<TypeConfig> for StateMachine {
     async fn applied_state(
         &mut self,
     ) -> Result<(Option<LogId<u64>>, StoredMembership<u64, Node>), StorageError<u64>> {
-        let last_applied = *self.last_applied.lock().await;
-        let last_membership = self.last_membership.lock().await.clone();
-        Ok((last_applied, last_membership))
+        Ok((*self.last_applied.lock(), self.last_membership.lock().clone()))
     }
 
     async fn apply<I>(
@@ -286,50 +319,54 @@ impl RaftStateMachine<TypeConfig> for StateMachine {
     where
         I: IntoIterator<Item = openraft::Entry<TypeConfig>> + Send,
     {
-        let wf = WorkflowRepository::new(self.db.clone());
-        let cp = CheckpointRepository::new(self.db.clone());
-        let ft = FencingTokenRepository::new(self.db.clone());
-
         let mut responses = Vec::new();
-        let mut last_log_id: Option<LogId<u64>> = None;
 
         for entry in entries {
             let log_id = entry.log_id;
 
             let response = match entry.payload {
-                EntryPayload::Normal(cmd) => self.apply_command(cmd, &wf, &cp, &ft).await?,
+                EntryPayload::Normal(cmd) => {
+                    // Lock is held only for the synchronous in-memory mutation.
+                    // No await inside → parking_lot::Mutex is appropriate.
+                    let mut store = self.store.lock();
+                    apply_command(&mut store, cmd)
+                } // lock released here
+
                 EntryPayload::Membership(m) => {
-                    let membership = StoredMembership::new(Some(log_id), m);
-                    *self.last_membership.lock().await = membership.clone();
-                    let json =
-                        serde_json::to_string(&membership).map_err(|e| sm_err(&e))?;
-                    self.put_meta("last_membership", json).await?;
+                    *self.last_membership.lock() = StoredMembership::new(Some(log_id), m);
                     WorkflowResponse::Empty
                 }
+
                 EntryPayload::Blank => WorkflowResponse::Empty,
             };
 
-            *self.last_applied.lock().await = Some(log_id);
-            last_log_id = Some(log_id);
+            *self.last_applied.lock() = Some(log_id);
             responses.push(response);
-        }
-
-        if let Some(lid) = last_log_id {
-            let json = serde_json::to_string(&lid).map_err(|e| sm_err(&e))?;
-            self.put_meta("last_applied", json).await?;
         }
 
         Ok(responses)
     }
 
     async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {
-        let last_applied = *self.last_applied.lock().await;
-        let last_membership = self.last_membership.lock().await.clone();
+        // Clone the store under a brief lock, then read metadata separately.
+        // No await is possible here, so parking_lot is safe.
+        let (snapshot_workflows, snapshot_fencing_tokens, snapshot_checkpoints) = {
+            let store = self.store.lock();
+            (
+                store.workflows.values().cloned().collect(),
+                store.fencing_tokens.iter().map(|(k, &v)| (k.clone(), v)).collect(),
+                store.checkpoints.values().cloned().collect(),
+            )
+        }; // store lock released before reading the other mutexes
+
         StateSnapshotBuilder {
-            db: self.db.clone(),
-            last_applied,
-            last_membership,
-            last_snapshot: self.last_snapshot.clone(),
+            snapshot_workflows,
+            snapshot_fencing_tokens,
+            snapshot_checkpoints,
+            last_applied:    *self.last_applied.lock(),
+            last_membership: self.last_membership.lock().clone(),
+            last_snapshot:   self.last_snapshot.clone(),
+            snapshot_path:   self.snapshot_path.clone(),
         }
     }
 
@@ -348,48 +385,33 @@ impl RaftStateMachine<TypeConfig> for StateMachine {
         let content: SnapshotContent =
             serde_json::from_slice(&bytes).map_err(|e| sm_err(&e))?;
 
-        // Clear all data CFs before restoring
-        for cf_name in [CF_WORKFLOWS, CF_FENCING_TOKENS, CF_CHECKPOINTS] {
-            clear_cf(&self.db, cf_name)?;
-        }
+        // Replace store contents atomically under a single lock acquisition.
+        {
+            let mut store = self.store.lock();
+            store.workflows.clear();
+            store.fencing_tokens.clear();
+            store.checkpoints.clear();
 
-        // Restore workflows
-        let cf = self.db.cf_handle(CF_WORKFLOWS).unwrap();
-        for wf in content.workflows {
-            let v = serde_json::to_vec(&wf).map_err(|e| sm_err(&e))?;
-            self.db.put_cf(cf, wf.id.as_bytes(), v).map_err(|e| sm_err(&e))?;
-        }
+            for wf in content.workflows {
+                store.workflows.insert(wf.id.clone(), wf);
+            }
+            for (id, token) in content.fencing_tokens {
+                store.fencing_tokens.insert(id, token);
+            }
+            for cp in content.checkpoints {
+                store
+                    .checkpoints
+                    .insert((cp.workflow_id.clone(), cp.position), cp);
+            }
+        } // store lock released
 
-        // Restore fencing tokens
-        let cf = self.db.cf_handle(CF_FENCING_TOKENS).unwrap();
-        for (workflow_id, token) in content.fencing_tokens {
-            self.db
-                .put_cf(cf, workflow_id.as_bytes(), token.to_be_bytes())
-                .map_err(|e| sm_err(&e))?;
-        }
+        *self.last_applied.lock()    = meta.last_log_id;
+        *self.last_membership.lock() = meta.last_membership.clone();
 
-        // Restore checkpoints
-        let cf = self.db.cf_handle(CF_CHECKPOINTS).unwrap();
-        for cp in content.checkpoints {
-            let key = cp_key(&cp.workflow_id, cp.position);
-            let v = serde_json::to_vec(&cp).map_err(|e| sm_err(&e))?;
-            self.db.put_cf(cf, key, v).map_err(|e| sm_err(&e))?;
-        }
+        // Persist so this snapshot is available on the next restart.
+        std::fs::write(&self.snapshot_path, &bytes).map_err(|e| sm_err(&e))?;
 
-        // Update in-memory state
-        *self.last_applied.lock().await = meta.last_log_id;
-        *self.last_membership.lock().await = meta.last_membership.clone();
-
-        // Persist to RaftMeta
-        let applied_json =
-            serde_json::to_string(&meta.last_log_id).map_err(|e| sm_err(&e))?;
-        self.put_meta("last_applied", applied_json).await?;
-        let membership_json =
-            serde_json::to_string(&meta.last_membership).map_err(|e| sm_err(&e))?;
-        self.put_meta("last_membership", membership_json).await?;
-
-        // Cache the installed snapshot
-        *self.last_snapshot.lock().await = Some((meta.clone(), bytes));
+        *self.last_snapshot.lock() = Some((meta.clone(), bytes));
 
         Ok(())
     }
@@ -397,13 +419,10 @@ impl RaftStateMachine<TypeConfig> for StateMachine {
     async fn get_current_snapshot(
         &mut self,
     ) -> Result<Option<openraft::Snapshot<TypeConfig>>, StorageError<u64>> {
-        let guard = self.last_snapshot.lock().await;
-        match guard.as_ref() {
-            Some((meta, bytes)) => Ok(Some(openraft::Snapshot {
-                meta: meta.clone(),
-                snapshot: Box::new(std::io::Cursor::new(bytes.clone())),
-            })),
-            None => Ok(None),
-        }
+        let guard = self.last_snapshot.lock();
+        Ok(guard.as_ref().map(|(meta, bytes)| openraft::Snapshot {
+            meta:     meta.clone(),
+            snapshot: Box::new(std::io::Cursor::new(bytes.clone())),
+        }))
     }
 }
