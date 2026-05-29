@@ -6,26 +6,22 @@
 
 ```rust
 pub struct RaftNode {
-    pub raft: Raft<TypeConfig>,   // openraft handle
-    pub node_id: NodeId,
-    pub db: Arc<rocksdb::DB>,    // state machine DB — shared with repositories in main.rs
+    pub raft:  Raft<TypeConfig>,
+    pub store: SharedStore,   // in-memory application state — shared with repositories
 }
 ```
 
 **`start(node_id, peers, data_dir) -> anyhow::Result<Arc<Self>>`**
 
 Sequence:
-1. `LogStore::open("{data_dir}/raft-log")` — RocksDB with CFs `logs` + `meta`
-2. `open_state_db("{data_dir}/state")` — RocksDB with CFs `workflows` + `fencing_tokens` + `checkpoints` + `raft_meta`
-3. `StateMachine::new(db.clone())` — loads persisted `last_applied` / `last_membership`
-4. `Raft::new(node_id, config, NetworkFactory::new(), log_store, state_machine)`
-5. `raft.initialize(members)` — single-node bootstrap if `peers` is empty; multi-node otherwise (first call wins, `AlreadyInitialized` silently ignored)
-6. Returns `Arc<RaftNode>`
+1. `LogStore::open("{data_dir}/raft-log")` — fjall keyspace with partitions `logs` + `meta`
+2. `StateMachine::new("{data_dir}/state")` — initialises in-memory store, restoring from `snapshot.bin` if present; returns `(StateMachine, SharedStore)`
+3. `Raft::new(node_id, config, NetworkFactory::new(), log_store, state_machine)`
+4. `raft.initialize(members)` — single-node bootstrap if `peers` is empty; multi-node otherwise (first call wins, `AlreadyInitialized` silently ignored)
+5. Returns `Arc<RaftNode>`
 
-**`is_leader() -> bool`**: `raft.current_leader().await == Some(self.node_id)`
-
-`db` is cloned (cheap `Arc` clone) into repository structs in `main.rs`.
-`StateMachine` also holds a clone of the same `Arc<DB>`.
+`store` is cloned (cheap `Arc` clone) into repository structs in `main.rs`.
+`StateMachine` also holds the same `SharedStore`.
 
 ### `server.rs` — `Server`
 
@@ -39,13 +35,14 @@ impl Server {
 ```
 
 Used in `main.rs` to parse each `--node "id addr_api addr_raft"` CLI argument.
+Only `addr_raft` is forwarded into the `Node` struct; `addr_api` is parsed but unused by the server.
 
 ## Dependencies
 
 - `storage::log_store::LogStore`
-- `storage::state_machine::{open_state_db, StateMachine}`
+- `storage::state_machine::{StateMachine, SharedStore}`
 - `storage::network::NetworkFactory`
 - `storage::type_config::{TypeConfig, NodeId, Node}`
 - `openraft::{Config, Raft}`
-- `rocksdb::DB`
+- `fjall` — log store persistence
 - `anyhow::Context` — `.context("...")` on error propagation

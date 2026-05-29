@@ -11,7 +11,7 @@ the command/response enums that travel through the log.
 ```rust
 pub type NodeId = u64;
 
-pub struct Node { pub addr_raft: String, pub addr_api: String }
+pub struct Node { pub addr_raft: String }
 
 declare_raft_types!(
     pub TypeConfig:
@@ -44,20 +44,26 @@ pub enum WorkflowResponse {
 }
 ```
 
-Both enums are `Serialize + Deserialize` — serialised into RocksDB via `serde_json`.
+Both enums are `Serialize + Deserialize` — serialised into the fjall log via `serde_json`.
 
 ### `log_store.rs` — `LogStore`
 
 ```rust
-pub struct LogStore { db: Arc<rocksdb::DB> }
-pub struct LogStoreReader { db: Arc<DB> }
+pub struct LogStore {
+    keyspace: Keyspace,
+    logs: PartitionHandle,
+    meta: PartitionHandle,
+}
+pub struct LogStoreReader { logs: PartitionHandle }
 ```
 
 Implements `RaftLogStorage<TypeConfig>` + `RaftLogReader<TypeConfig>`.
 
-**RocksDB layout** (DB at `{data_dir}/raft-log`):
-- CF `logs`: key = `u64` index as 8-byte big-endian, value = serde_json entry
-- CF `meta`: keys `vote`, `committed`, `purged` → serde_json values
+Uses fjall (`fjall::Keyspace`) for durability. `LogStore::open(path) -> Result<Self, fjall::Error>` opens (or creates) the keyspace with a 1-second background fsync interval.
+
+**Layout** (keyspace at `{data_dir}/raft-log`):
+- Partition `logs`: key = `u64` index as 8-byte big-endian, value = serde_json entry
+- Partition `meta`: keys `vote`, `committed`, `purged` → serde_json values
 
 ### `state_machine.rs` — `StateMachine`
 
@@ -136,7 +142,12 @@ updates metadata locks → persists to `snapshot_path`.
 ```rust
 pub struct NetworkFactory { pool: Arc<DashMap<NodeId, Arc<PeerConn>>> }
 pub struct Network { conn: Arc<PeerConn> }
-struct PeerConn { addr: String, stream: tokio::sync::Mutex<Option<TcpStream>> }
+struct PeerConn {
+    addr:     String,
+    state:    RwLock<ConnState>,   // write_tx: Option<UnboundedSender>
+    pending:  Arc<DashMap<u64, oneshot::Sender<Result<Vec<u8>, NetworkError>>>>,
+    next_id:  AtomicU64,
+}
 ```
 
 `NetworkFactory` implements `RaftNetworkFactory<TypeConfig>`:
@@ -147,9 +158,11 @@ struct PeerConn { addr: String, stream: tokio::sync::Mutex<Option<TcpStream>> }
   `PeerConn::send()`, decode response
 
 `PeerConn::send()`:
-- Lazy connect on first use; reconnects once on any I/O error
+- Lazy connect on first use; spawns a background reader task + writer task per connection
+- `RwLock<ConnState>` is held only during (re)connection — never across the response wait
+- Concurrent sends proceed in parallel: each registers a oneshot waiter, releases the lock,
+  sends its frame to the writer channel, then awaits its own oneshot independently
 - TCP_NODELAY enabled (prevents Nagle delay on Raft heartbeats)
-- `tokio::sync::Mutex` — guard held across `.await` in `send()`
 
 ### `network_codec.rs`
 
@@ -176,12 +189,15 @@ JSON codec is the production implementation.
 
 ### `framing.rs`
 
-Length-prefixed TCP framing: **4-byte big-endian length + body**.
+Length-prefixed TCP framing: **4-byte big-endian payload-len + 8-byte big-endian req_id + payload** (12-byte header).
 
 ```rust
-pub async fn write_framed(stream: &mut TcpStream, data: &[u8]) -> Result<(), NetworkError>
-pub async fn read_framed(stream: &mut TcpStream)  -> Result<Vec<u8>, NetworkError>
+pub async fn write_framed<W: AsyncWriteExt + Unpin>(w: &mut W, req_id: u64, data: &[u8]) -> Result<(), NetworkError>
+pub async fn read_framed<R: AsyncReadExt + Unpin>(r: &mut R) -> Result<(u64, Vec<u8>), NetworkError>
 ```
+
+`req_id` is echoed verbatim in the response so the background reader task can route each
+response to the correct `oneshot::Sender`.
 
 ### `tcp_server.rs` — `TcpRaftServer`
 
@@ -194,25 +210,27 @@ impl TcpRaftServer {
 ```
 
 `listen()` accepts connections in a loop, spawning a task per connection.
-Each task runs `handle_conn()`: reads frames, dispatches to `dispatch()`, writes response.
+Each task runs `handle_conn()`: reads frames, dispatches to `dispatch()`, writes response
+with the same `req_id` so the client's reader task can route it.
 `dispatch()` peeks the discriminant byte, routes to the local raft instance.
 
-## Two separate RocksDB instances
+## Persistence model
 
-| Instance | Path | Column families | Purpose |
-|----------|------|----------------|---------|
-| Log store | `{data_dir}/raft-log` | `logs`, `meta` | Raft log entries and vote/committed state |
-| State machine | `{data_dir}/state` | `workflows`, `fencing_tokens`, `checkpoints`, `raft_meta` | Application data and Raft applied state |
+| Component | Storage | Path |
+|-----------|---------|------|
+| Raft log | fjall keyspace | `{data_dir}/raft-log` |
+| Application state | RAM (HashMap/BTreeMap) | — |
+| Snapshot | JSON file | `{data_dir}/state/snapshot.bin` |
 
-They remain separate DBs — different paths, different `Arc<DB>` handles. The state machine DB
-is opened by `open_state_db()` and stored in `RaftNode.db`, then shared with repositories.
+The state machine has no RocksDB dependency. On restart, state is restored from the
+snapshot file; openraft then replays any log entries committed after the snapshot.
 
 ## Dependencies
 
 - `openraft 0.9` — `RaftLogStorage`, `RaftStateMachine`, `RaftNetworkFactory`, `RaftNetwork`
-- `rocksdb` — both DBs (C++ FFI)
-- `serde_json` — log entry, metadata, and state machine record serialisation
-- `tokio::sync::Mutex` — async-safe locks
-- `dashmap` — lock-free peer connection pool
-- `repositories::{WorkflowRepository, CheckpointRepository, FencingTokenRepository}` — state machine apply dispatch
+- `fjall` — log store persistence
+- `serde_json` — log entry, metadata, and snapshot serialisation
+- `parking_lot` — sync mutexes for state machine (no await while held)
+- `dashmap` — lock-free peer connection pool + pending-response map
+- `tokio::sync::{mpsc, oneshot}` — async writer channel + per-request response routing
 - `error::NetworkError`

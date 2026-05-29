@@ -115,13 +115,11 @@ impl LeaseRepository {
 ## Error handling
 
 ```rust
-pub enum RepositoryError {
-    Decode(String),  // serde_json decode failures (e.g., in snapshot restore)
-}
+pub enum RepositoryError {}  // empty — in-memory HashMap/BTreeMap ops are infallible
 ```
 
-In-memory HashMap/BTreeMap operations are infallible, so `RepositoryError` is only
-produced by explicit decode paths; most methods simply return `Ok(...)`.
+All repository methods return `Ok(...)` unconditionally; `RepositoryError` exists only
+to satisfy the `Result<T, RepositoryError>` return type required by service callers.
 
 ## Concurrency
 

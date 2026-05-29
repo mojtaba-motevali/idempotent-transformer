@@ -1,6 +1,6 @@
 # schema/ — Plain data structs
 
-Row types that map directly to RocksDB values (JSON-encoded) or wire values.
+Plain data types used as in-memory store values and snapshot content.
 No logic, no database calls. All structs derive `Debug + Clone + Serialize + Deserialize`.
 
 ## Files
@@ -20,8 +20,8 @@ pub struct Workflow {
 }
 ```
 
-Stored as serde_json in `CF_WORKFLOWS` of the state machine RocksDB.
-Key: `workflow_id` bytes.
+Stored in `Store.workflows` (`HashMap<String, Workflow>`), keyed by `workflow_id`.
+Serialised into the snapshot JSON file on disk.
 
 ### `checkpoint.rs`
 
@@ -41,8 +41,8 @@ pub struct Checkpoint {
 }
 ```
 
-`Checkpoint` is stored as serde_json in `CF_CHECKPOINTS`.
-Key: `{workflow_id_bytes}\x00{position.to_be_bytes()}`.
+`Checkpoint` is stored in `Store.checkpoints` (`BTreeMap<(String, i64), Checkpoint>`),
+keyed by `(workflow_id, position)`.
 
 `CheckpointValue` is a view type used in some service response paths.
 

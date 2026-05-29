@@ -73,9 +73,9 @@ pub struct CreateDurableIdempotencyKeyOutput { idempotency_key: String }
 | `create` (workflow + fencing token) | → Raft `client_write` |
 | `finish` (complete workflow) | → Raft `client_write` |
 | `checkpoint` (upsert) | → Raft `client_write` (via `CheckpointRepository`) |
-| `status` (read workflow) | → Direct SQL read |
+| `status` (read workflow) | → Direct in-memory read |
 | `lease` (read token + lease) | → Direct reads; lease acquire is moka only |
-| `cleanup_expired` | → Direct SQL (leader-only, best-effort) |
+| `cleanup_expired` | → Direct in-memory (leader-only, best-effort) |
 
 ## Dependencies
 
