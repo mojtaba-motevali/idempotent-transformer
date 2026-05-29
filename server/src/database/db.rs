@@ -12,10 +12,9 @@ use crate::storage::{
 };
 
 pub struct RaftNode {
-    pub raft:     Raft<TypeConfig>,
-    pub node_id:  NodeId,
+    pub raft:  Raft<TypeConfig>,
     /// In-memory application state — shared with repository structs.
-    pub store:    SharedStore,
+    pub store: SharedStore,
 }
 
 impl RaftNode {
@@ -66,10 +65,6 @@ impl RaftNode {
             let _ = raft.initialize(members).await;
         }
 
-        Ok(Arc::new(Self { raft, node_id, store }))
-    }
-
-    pub async fn is_leader(&self) -> bool {
-        self.raft.current_leader().await == Some(self.node_id)
+        Ok(Arc::new(Self { raft, store }))
     }
 }

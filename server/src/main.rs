@@ -3,31 +3,20 @@ use std::sync::Arc;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
 
-use crate::cli::Args;
-use crate::database::{db::RaftNode, server::Server};
-use crate::repositories::{
-    checkpoints::CheckpointRepository,
-    lease_checkpoint::LeaseRepository,
-    workflows::WorkflowRepository,
-    workflows_fencing_tokens::FencingTokenRepository,
+use idempotency_server::{
+    cli::Args,
+    cron::clean_up_workflows::clean_up_expired_workflows,
+    database::{db::RaftNode, server::Server},
+    repositories::{
+        checkpoints::CheckpointRepository,
+        lease_checkpoint::LeaseRepository,
+        workflows::WorkflowRepository,
+        workflows_fencing_tokens::FencingTokenRepository,
+    },
+    rpc_server::server::{start_server, WorkflowRpcHandler},
+    services::{checkpoint_service::CheckpointService, workflow_service::WorkflowService},
+    storage::{tcp_server::TcpRaftServer, type_config::Node},
 };
-use crate::rpc_server::server::{start_server, WorkflowRpcHandler};
-use crate::services::{
-    checkpoint_service::CheckpointService,
-    workflow_service::WorkflowService,
-};
-use crate::storage::{tcp_server::TcpRaftServer, type_config::Node};
-use crate::cron::clean_up_workflows::clean_up_expired_workflows;
-
-mod cli;
-mod cron;
-mod database;
-mod error;
-mod repositories;
-mod rpc_server;
-mod schema;
-mod services;
-mod storage;
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();

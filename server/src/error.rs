@@ -1,10 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum RepositoryError {
-    #[error("decode error: {0}")]
-    Decode(String),
-}
+pub enum RepositoryError {}
 
 #[derive(Error, Debug)]
 pub enum WorkflowError {

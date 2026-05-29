@@ -9,6 +9,7 @@ use openraft::{
 use crate::storage::type_config::{NodeId, TypeConfig};
 
 pub struct LogStore {
+    #[allow(dead_code)]
     keyspace: Keyspace,
     logs: PartitionHandle,
     meta: PartitionHandle,
