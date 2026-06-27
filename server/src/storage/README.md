@@ -166,12 +166,15 @@ struct PeerConn {
 
 ### `network_codec.rs`
 
-Wire format: **1-byte type discriminant + serde_json body**.
+Wire format: **1-byte type discriminant + rkyv body**.
 
 ```
 Byte 0:  message type (1–6)
-Bytes 1+: serde_json encoded body
+Bytes 1+: rkyv-encoded body
 ```
+
+openraft's RPC types only implement serde, so each is mirrored by an owned
+rkyv DTO in `rkyv_dto.rs` and converted at the boundary via `From`.
 
 Discriminants:
 ```
@@ -184,8 +187,8 @@ Encode functions (client): `encode_append_entries_request`, `encode_vote_request
 Decode functions (client): `decode_append_entries_response`, `decode_vote_response`, `decode_install_snapshot_response`
 Encode/decode functions (server): symmetric counterparts
 
-Note: FlatBuffers schema at `flatbuffers/raft_network.fbs` exists but is optional.
-JSON codec is the production implementation.
+The fjall log store (`log_store.rs`) reuses the same DTOs to persist
+`Entry`/`Vote`/`LogId` as rkyv.
 
 ### `framing.rs`
 

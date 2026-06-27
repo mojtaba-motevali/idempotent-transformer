@@ -35,50 +35,86 @@ The system consists of two main components:
 └─────────────────┘             └─────────────────┘
 ```
 
-## Quick Start
+## Prerequisites
 
-### 1. Install the Core Package
+| Tool                  | Version | Needed for                                   |
+| --------------------- | ------- | -------------------------------------------- |
+| Rust                  | 1.88+   | Building the server (edition 2024)           |
+| `protoc`              | any     | tonic gRPC codegen (`apt install protobuf-compiler`) |
+| Node.js               | 20+     | TypeScript client packages                   |
+| pnpm                  | 10.9+   | Workspace package manager (`npm i -g pnpm`)  |
+| Docker + Compose      | recent  | *Optional* — running a 3-node cluster        |
+
+> The Raft network + log store use [rkyv](https://rkyv.org) for binary
+> serialization — pure Rust, no external codegen tool required.
+
+## Getting Started — Step by Step
+
+### Step 1 — Run the server
+
+Pick **one** of the options below.
+
+**Option A — single node via Cargo (simplest for development):**
+
+```bash
+cd server
+cargo run --release -- \
+  --node-id 1 \
+  --rpc-addr 0.0.0.0:51000 \
+  --addr-raft 0.0.0.0:9001 \
+  --data-dir /tmp/idempotency \
+  --node "1 127.0.0.1:51000 127.0.0.1:9001"
+```
+
+The gRPC API is now listening on `localhost:51000`. Set `RUST_LOG=info` for logs.
+
+**Option B — 3-node cluster via Docker Compose (production-like):**
+
+```bash
+cd server
+docker build -t idempotency-server:latest .
+docker compose up
+```
+
+Nodes expose gRPC on `51000`, `51001`, `51002`.
+
+**Option C — single node via Docker:**
+
+```bash
+docker run -p 51000:51000 -p 9001:9001 \
+  -v /tmp/idempotency:/app/data \
+  idempotency-server:latest \
+  --node-id 1 \
+  --rpc-addr 0.0.0.0:51000 \
+  --addr-raft 0.0.0.0:9001 \
+  --data-dir /app/data \
+  --node "1 127.0.0.1:51000 127.0.0.1:9001"
+```
+
+| Flag          | Description              | Env var               |
+| ------------- | ------------------------ | --------------------- |
+| `--node-id`   | Node identifier          | `NODE_ID`             |
+| `--rpc-addr`  | gRPC service address     | `RPC_ADDR`            |
+| `--addr-raft` | Raft consensus address   | `ADDR_RAFT`           |
+| `--data-dir`  | Data directory           | `DATA_DIR`            |
+| `--node`      | Cluster member (repeatable: `"id host:rpc host:raft"`) | `NODES` (comma-separated) |
+| `--worker-threads` | Tokio worker threads (default 4) | `TOKIO_WORKER_THREADS` |
+
+### Step 2 — Build the client packages
+
+```bash
+# from the repository root
+pnpm install
+pnpm -r run build
+```
+
+Or, if installing the published packages into your own app:
 
 ```bash
 npm install @idempotent-transformer/core @idempotent-transformer/grpc-adapter @idempotent-transformer/message-pack-adapter protobufjs
 ```
 
-### 2. Set Up the Server
-
-Build and run the Rust server using Cargo:
-
-```bash
-# Build the server
-cd server
-cargo run --release
-```
-
-Build and run the Rust server using Docker:
-
-```bash
-# Build the server
-cd server
-docker build -t idempotency-server .
-
-# Run with Docker Compose (recommended for production)
-docker-compose up
-```
-
-Or run a single node:
-
-```bash
-docker run -p 51000:51000 -p 8100:8100 -p 8200:8200 \
-  -e RPC_ADDR="0.0.0.0:51000" \
-  -e NODES="1 localhost:8100 localhost:8200" \
-  -e DATA_DIR="/app/data" \
-  -e NODE_ID="1" \
-  -e ADDR_API="localhost:8100" \
-  -e ADDR_RAFT="localhost:8200" \
-  -v "/dev/shm/data/node_1:/app/data" \
-  idempotency-server
-```
-
-### 3. Configure the Client
+### Step 3 — Configure the Client
 
 ```typescript
 import { IdempotentFactory } from '@idempotent-transformer/core';
@@ -104,7 +140,7 @@ async function initialize() {
 const transformer = await initialize();
 ```
 
-### 4. Use Workflow-Based Idempotent Functions
+### Step 4 — Use Workflow-Based Idempotent Functions
 
 ```typescript
 import { IdempotentTransformer } from '@idempotent-transformer/core';
@@ -258,14 +294,17 @@ try {
 
 ### Environment Variables
 
-| Variable    | Description            | Default                   |
-| ----------- | ---------------------- | ------------------------- |
-| `RPC_ADDR`  | gRPC service address   | `0.0.0.0:51000`           |
-| `NODES`     | Cluster member list    | `1 node1:8100 node1:8200` |
-| `DATA_DIR`  | Data directory         | `/app/data`               |
-| `NODE_ID`   | Node identifier        | `1`                       |
-| `ADDR_API`  | API address            | `0.0.0.0:8100`            |
-| `ADDR_RAFT` | Raft consensus address | `0.0.0.0:8200`            |
+All flags from Step 1 can be supplied as environment variables instead:
+
+| Variable               | CLI flag             | Description                            |
+| ---------------------- | -------------------- | -------------------------------------- |
+| `NODE_ID`              | `--node-id`          | Node identifier                        |
+| `RPC_ADDR`             | `--rpc-addr`         | gRPC service address                   |
+| `ADDR_RAFT`            | `--addr-raft`        | Raft consensus address                 |
+| `DATA_DIR`             | `--data-dir`         | Data directory                         |
+| `NODES`                | `--node`             | Cluster members, comma-separated       |
+| `TOKIO_WORKER_THREADS` | `--worker-threads`   | Tokio worker threads (default `4`)     |
+| `TOKIO_WORKER_STACK_SIZE` | `--stack-size`    | Worker thread stack size (default 8 MiB) |
 
 ### Docker Compose Setup
 
@@ -288,8 +327,12 @@ For development, you can run a single node:
 
 ```bash
 cd server
-docker build -t idempotency-server .
-docker run -p 51000:51000 idempotency-server
+docker build -t idempotency-server:latest .
+docker run -p 51000:51000 -p 9001:9001 \
+  -v /tmp/idempotency:/app/data \
+  idempotency-server:latest \
+  --node-id 1 --rpc-addr 0.0.0.0:51000 --addr-raft 0.0.0.0:9001 \
+  --data-dir /app/data --node "1 127.0.0.1:51000 127.0.0.1:9001"
 ```
 
 ## Advanced Usage

@@ -6,6 +6,7 @@ use openraft::{
     Entry, LogId, LogState, OptionalSend, RaftLogId, StorageError, StorageIOError, Vote,
 };
 
+use crate::storage::rkyv_dto::{aligned, encode_rkyv, EntryDto, LogIdDto, VoteDto};
 use crate::storage::type_config::{NodeId, TypeConfig};
 
 pub struct LogStore {
@@ -49,6 +50,30 @@ fn map_err_write(e: fjall::Error) -> StorageError<NodeId> {
     }
 }
 
+// ── rkyv (de)serialization helpers ─────────────────────────────────────────────
+//
+// openraft's `Entry`/`Vote`/`LogId` are serde-only, so we go through the rkyv
+// DTOs in `rkyv_dto`. rkyv errors are wrapped in `std::io::Error` so they can
+// flow through openraft's `StorageIOError`.
+
+fn rkyv_io(e: impl std::fmt::Display) -> std::io::Error {
+    std::io::Error::other(e.to_string())
+}
+
+fn encode_entry(entry: &Entry<TypeConfig>) -> Result<Vec<u8>, StorageError<NodeId>> {
+    encode_rkyv(&EntryDto::from(entry)).map_err(|e| StorageError::IO {
+        source: StorageIOError::write_logs(&rkyv_io(e)),
+    })
+}
+
+fn decode_entry(bytes: &[u8]) -> Result<Entry<TypeConfig>, StorageError<NodeId>> {
+    rkyv::from_bytes::<EntryDto, rkyv::rancor::Error>(&aligned(bytes))
+        .map(Entry::from)
+        .map_err(|e| StorageError::IO {
+            source: StorageIOError::read_logs(&rkyv_io(e)),
+        })
+}
+
 fn read_range(
     logs: &PartitionHandle,
     start: u64,
@@ -57,11 +82,7 @@ fn read_range(
     let mut entries = Vec::new();
     for item in logs.range(log_key(start)..log_key(end)) {
         let (_k, v) = item.map_err(map_err_read)?;
-        let entry: Entry<TypeConfig> =
-            serde_json::from_slice(&v).map_err(|e| StorageError::IO {
-                source: StorageIOError::read_logs(&e),
-            })?;
-        entries.push(entry);
+        entries.push(decode_entry(&v)?);
     }
     Ok(entries)
 }
@@ -120,14 +141,12 @@ impl RaftLogStorage<TypeConfig> for LogStore {
             .next_back()
             .transpose()
             .map_err(map_err_read)?
-            .and_then(|(_k, v)| {
-                serde_json::from_slice::<Entry<TypeConfig>>(&v)
-                    .ok()
-                    .map(|e| *e.get_log_id())
-            });
+            .and_then(|(_k, v)| decode_entry(&v).ok().map(|e| *e.get_log_id()));
 
         let purged = match self.meta.get(b"purged").map_err(map_err_read)? {
-            Some(bytes) => serde_json::from_slice::<LogId<NodeId>>(&bytes).ok(),
+            Some(bytes) => rkyv::from_bytes::<LogIdDto, rkyv::rancor::Error>(&aligned(&bytes))
+                .ok()
+                .map(|d| LogId::from(&d)),
             None => None,
         };
 
@@ -141,8 +160,9 @@ impl RaftLogStorage<TypeConfig> for LogStore {
         &mut self,
         committed: Option<LogId<NodeId>>,
     ) -> Result<(), StorageError<NodeId>> {
-        let bytes = serde_json::to_vec(&committed).map_err(|e| StorageError::IO {
-            source: StorageIOError::write_logs(&e),
+        let dto = committed.as_ref().map(LogIdDto::from);
+        let bytes = encode_rkyv(&dto).map_err(|e| StorageError::IO {
+            source: StorageIOError::write_logs(&rkyv_io(e)),
         })?;
         self.meta.insert(b"committed", bytes).map_err(map_err_write)
     }
@@ -150,18 +170,19 @@ impl RaftLogStorage<TypeConfig> for LogStore {
     async fn read_committed(&mut self) -> Result<Option<LogId<NodeId>>, StorageError<NodeId>> {
         match self.meta.get(b"committed").map_err(map_err_read)? {
             Some(bytes) => {
-                let v = serde_json::from_slice(&bytes).map_err(|e| StorageError::IO {
-                    source: StorageIOError::read_logs(&e),
-                })?;
-                Ok(v)
+                let dto = rkyv::from_bytes::<Option<LogIdDto>, rkyv::rancor::Error>(&aligned(&bytes))
+                    .map_err(|e| StorageError::IO {
+                        source: StorageIOError::read_logs(&rkyv_io(e)),
+                    })?;
+                Ok(dto.map(|d| LogId::from(&d)))
             }
             None => Ok(None),
         }
     }
 
     async fn save_vote(&mut self, vote: &Vote<NodeId>) -> Result<(), StorageError<NodeId>> {
-        let bytes = serde_json::to_vec(vote).map_err(|e| StorageError::IO {
-            source: StorageIOError::write_vote(&e),
+        let bytes = encode_rkyv(&VoteDto::from(vote)).map_err(|e| StorageError::IO {
+            source: StorageIOError::write_vote(&rkyv_io(e)),
         })?;
         self.meta.insert(b"vote", bytes).map_err(|e| StorageError::IO {
             source: StorageIOError::write_vote(&e),
@@ -173,12 +194,11 @@ impl RaftLogStorage<TypeConfig> for LogStore {
             source: StorageIOError::read_vote(&e),
         })? {
             Some(bytes) => {
-                let vote: Vote<NodeId> = serde_json::from_slice(&bytes).map_err(|e| {
-                    StorageError::IO {
-                        source: StorageIOError::read_vote(&e),
-                    }
-                })?;
-                Ok(Some(vote))
+                let dto = rkyv::from_bytes::<VoteDto, rkyv::rancor::Error>(&aligned(&bytes))
+                    .map_err(|e| StorageError::IO {
+                        source: StorageIOError::read_vote(&rkyv_io(e)),
+                    })?;
+                Ok(Some(Vote::from(&dto)))
             }
             None => Ok(None),
         }
@@ -194,9 +214,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
     {
         for entry in entries {
             let lid = *entry.get_log_id();
-            let bytes = serde_json::to_vec(&entry).map_err(|e| StorageError::IO {
-                source: StorageIOError::write_logs(&e),
-            })?;
+            let bytes = encode_entry(&entry)?;
             self.logs.insert(log_key(lid.index), bytes).map_err(map_err_write)?;
         }
         callback.log_io_completed(Ok(()));
@@ -218,16 +236,16 @@ impl RaftLogStorage<TypeConfig> for LogStore {
         // Previous purges already removed [0, last_purged], so only delete
         // (last_purged, log_id.index].
         let from = match self.meta.get(b"purged").map_err(map_err_read)? {
-            Some(bytes) => serde_json::from_slice::<LogId<NodeId>>(&bytes)
-                .map(|l| l.index + 1)
+            Some(bytes) => rkyv::from_bytes::<LogIdDto, rkyv::rancor::Error>(&aligned(&bytes))
+                .map(|d| LogId::from(&d).index + 1)
                 .unwrap_or(0),
             None => 0,
         };
 
         // Update the marker immediately so get_log_state() returns the correct
         // last_purged_log_id without waiting for the deletions to finish.
-        let bytes = serde_json::to_vec(&log_id).map_err(|e| StorageError::IO {
-            source: StorageIOError::write_logs(&e),
+        let bytes = encode_rkyv(&LogIdDto::from(&log_id)).map_err(|e| StorageError::IO {
+            source: StorageIOError::write_logs(&rkyv_io(e)),
         })?;
         self.meta.insert(b"purged", bytes).map_err(map_err_write)?;
 

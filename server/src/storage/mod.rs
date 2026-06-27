@@ -5,9 +5,5 @@ pub mod state_machine;
 pub mod framing;
 pub mod network;
 pub mod network_codec;
+pub mod rkyv_dto;
 pub mod tcp_server;
-
-#[allow(warnings, clippy::all)]
-mod raft_network_generated {
-    include!(concat!(env!("OUT_DIR"), "/raft_network_generated.rs"));
-}

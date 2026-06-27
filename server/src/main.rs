@@ -8,12 +8,10 @@ use idempotency_server::{
     cron::clean_up_workflows::clean_up_expired_workflows,
     database::{db::RaftNode, server::Server},
     repositories::{
-        checkpoints::CheckpointRepository,
-        lease_checkpoint::LeaseRepository,
-        workflows::WorkflowRepository,
-        workflows_fencing_tokens::FencingTokenRepository,
+        checkpoints::CheckpointRepository, lease_checkpoint::LeaseRepository,
+        workflows::WorkflowRepository, workflows_fencing_tokens::FencingTokenRepository,
     },
-    rpc_server::server::{start_server, WorkflowRpcHandler},
+    rpc_server::server::{WorkflowRpcHandler, start_server},
     services::{checkpoint_service::CheckpointService, workflow_service::WorkflowService},
     storage::{tcp_server::TcpRaftServer, type_config::Node},
 };
@@ -50,8 +48,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
         .with_target(true)
         .with_level(true)
         .with_env_filter(
-            EnvFilter::try_from_env("RUST_LOG")
-                .unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_env("RUST_LOG").unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 
@@ -76,6 +73,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
         raft.clone(),
         args.node_id,
     ));
+
     let checkpoint_svc = Arc::new(CheckpointService::new(
         checkpoint_repo,
         lease_repo,
@@ -98,8 +96,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
     let mut scheduler = clean_up_expired_workflows(workflow_svc).await?;
 
     // 7. gRPC + shutdown
-    let mut sigterm =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
 
     tokio::select! {
         res = start_server(args.rpc_addr.as_str(), handler) => {

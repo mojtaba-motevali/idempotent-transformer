@@ -21,7 +21,6 @@ COPY src ./src
 COPY migrations ./migrations
 COPY build.rs ./
 COPY proto ./proto
-COPY flatbuffers ./flatbuffers
 
 RUN cargo build --release
 
@@ -33,11 +32,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r app && useradd -r -g app app
-USER app
 
 WORKDIR /app
 
 COPY --from=builder /app/target/release/idempotency-server ./idempotency-server
 COPY --from=builder /app/migrations ./migrations
+
+# Pre-create the data dir owned by `app`. A fresh named volume mounted at
+# /app/data inherits this ownership, so the non-root process can write its
+# fjall keyspace (raft-log). Without this the volume is root-owned → EACCES.
+RUN mkdir -p /app/data && chown -R app:app /app/data
+
+USER app
 
 ENTRYPOINT ["./idempotency-server"]

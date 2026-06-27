@@ -51,10 +51,10 @@ pub enum NetworkError {
     #[error("TCP I/O error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("FlatBuffers serialize error: {0}")]
+    #[error("rkyv serialize error: {0}")]
     Serialize(String),
 
-    #[error("FlatBuffers deserialize error: {0}")]
+    #[error("rkyv deserialize error: {0}")]
     Deserialize(String),
 
     #[error("unexpected message type: {0:#x}")]

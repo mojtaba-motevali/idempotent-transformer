@@ -75,9 +75,6 @@ migrations/
 
 proto/
   workflow_service.proto           7-endpoint gRPC definition (UNCHANGED from hiqlite version)
-
-flatbuffers/
-  raft_network.fbs                 FlatBuffers schema (codegen skipped if flatc absent)
 ```
 
 ## Key types

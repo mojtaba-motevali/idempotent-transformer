@@ -24,8 +24,8 @@ moka = { version = "0.12", features = ["future"] }
 # Per-position in-process locks
 dashmap = "6"
 
-# FlatBuffers runtime (Raft network serialization)
-flatbuffers = "24"
+# rkyv — zero-copy binary serialization for Raft wire messages + log store
+rkyv = "0.8"
 
 # Typed errors
 thiserror = "1"
@@ -62,7 +62,6 @@ tempfile = "3"
 
 [build-dependencies]
 tonic-build = "0.9"
-flatbuffers-build = "0.2"
 
 [profile.release]
 opt-level = "z"

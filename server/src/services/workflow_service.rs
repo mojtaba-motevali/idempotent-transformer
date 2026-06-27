@@ -6,8 +6,7 @@ use tracing::instrument;
 use crate::{
     error::WorkflowError,
     repositories::{
-        checkpoints::CheckpointRepository,
-        workflows::WorkflowRepository,
+        checkpoints::CheckpointRepository, workflows::WorkflowRepository,
         workflows_fencing_tokens::FencingTokenRepository,
     },
     schema::workflow::Workflow,
@@ -66,14 +65,16 @@ impl WorkflowService {
         let created_at = Utc::now().timestamp_millis();
 
         let (workflow_res, token_res) = tokio::join!(
-            self.raft.client_write_ff(WorkflowCommand::CreateOrGetWorkflow {
-                workflow_id: workflow_id.to_owned(),
-                name: name.map(str::to_owned),
-                created_at,
-            }),
-            self.raft.client_write(WorkflowCommand::IncrementFencingToken {
-                workflow_id: workflow_id.to_owned(),
-            }),
+            self.raft
+                .client_write_ff(WorkflowCommand::CreateOrGetWorkflow {
+                    workflow_id: workflow_id.to_owned(),
+                    name: name.map(str::to_owned),
+                    created_at,
+                }),
+            self.raft
+                .client_write(WorkflowCommand::IncrementFencingToken {
+                    workflow_id: workflow_id.to_owned(),
+                }),
         );
 
         workflow_res.map_err(|e| WorkflowError::Raft(e.to_string()))?;
