@@ -1,128 +1,72 @@
 services:
   node1:
-    image: idempotency-server:latest # build or pull this image beforehand
+    image: idempotency-server:latest
     container_name: node1
-    restart: always
-    environment:
-      # gRPC service address inside the container
-      RPC_ADDR: '0.0.0.0:51000'
-      # Cluster member list:  id  addr_api          addr_raft
-      NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
-      DATA_DIR: '/app/data'
-      NODE_ID: '1'
-      ADDR_API: '0.0.0.0:8100'
-      ADDR_RAFT: '0.0.0.0:8200'
-      TOKIO_WORKER_STACK_SIZE: "4194304"
-      TOKIO_WORKER_THREADS: "16"
-      # HQL_DANGER_RAFT_STATE_RESET: 'true'
-      # Optional: let jemalloc return memory immediately
-      # MALLOC_CONF: "dirty_decay_ms:0,muzzy_decay_ms:0"
-    # volumes:
-    #   - data1:/app/data
+    restart: unless-stopped
+    command:
+      - "--node-id=1"
+      - "--addr-raft=0.0.0.0:8200"
+      - "--rpc-addr=0.0.0.0:51000"
+      - "--data-dir=/app/data"
+      - "--node=1 node1:8200"
+      - "--node=2 node2:8201"
+      - "--node=3 node3:8202"
+      - "--worker-threads=4"
+    volumes:
+      - data1:/app/data
     ports:
-      - '51000:51000' # RPC
-      - '8100:8100' # API
-      - '8200:8200' # Raft
+      - "51000:51000"   # gRPC
+      - "8200:8200"     # Raft
     networks:
       - cluster_net
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '4.0' # Adjust this value based on your system's CPU cores
-    #     reservations:
-    #       cpus: '0.5' # Minimum CPU reservation
 
   node2:
     image: idempotency-server:latest
     container_name: node2
-    restart: always
-    environment:
-      RPC_ADDR: '0.0.0.0:51001'
-      NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
-      DATA_DIR: '/app/data'
-      NODE_ID: '2'
-      ADDR_API: '0.0.0.0:8101'
-      ADDR_RAFT: '0.0.0.0:8201'
-      TOKIO_WORKER_STACK_SIZE: "4194304"
-      TOKIO_WORKER_THREADS: "16"
-      # HQL_DANGER_RAFT_STATE_RESET: 'true'
-    # volumes:
-    #   - data2:/app/data
+    restart: unless-stopped
+    command:
+      - "--node-id=2"
+      - "--addr-raft=0.0.0.0:8201"
+      - "--rpc-addr=0.0.0.0:51001"
+      - "--data-dir=/app/data"
+      - "--node=1 node1:8200"
+      - "--node=2 node2:8201"
+      - "--node=3 node3:8202"
+      - "--worker-threads=4"
+    volumes:
+      - data2:/app/data
     ports:
-      - '51001:51001'
-      - '8101:8101'
-      - '8201:8201'
+      - "51001:51001"
+      - "8201:8201"
     networks:
       - cluster_net
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '3.0' # Adjust this value based on your system's CPU cores
-    #     reservations:
-    #       cpus: '0.5' # Minimum CPU reservation
+
   node3:
     image: idempotency-server:latest
     container_name: node3
-    restart: always
-    environment:
-      RPC_ADDR: '0.0.0.0:51002'
-      NODES: '1 node1:8100 node1:8200,2 node2:8101 node2:8201,3 node3:8102 node3:8202'
-      DATA_DIR: '/app/data'
-      NODE_ID: '3'
-      ADDR_API: '0.0.0.0:8102'
-      ADDR_RAFT: '0.0.0.0:8202'
-      TOKIO_WORKER_STACK_SIZE: "4194304"
-      TOKIO_WORKER_THREADS: "16"
-      # HQL_DANGER_RAFT_STATE_RESET: 'true'
-    # volumes:
-    #   - data3:/app/data
-    ports:
-      - '51002:51002'
-      - '8102:8102'
-      - '8202:8202'
-    networks:
-      - cluster_net
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '3.0' # Adjust this value based on your system's CPU cores
-    #     reservations:
-    #       cpus: '0.5' # Minimum CPU reservation
-  nginx:
-    image: nginx:latest
-    container_name: nginx
-    restart: always
-    ports:
-      - '8080:8080' # Expose the gRPC port
+    restart: unless-stopped
+    command:
+      - "--node-id=3"
+      - "--addr-raft=0.0.0.0:8202"
+      - "--rpc-addr=0.0.0.0:51002"
+      - "--data-dir=/app/data"
+      - "--node=1 node1:8200"
+      - "--node=2 node2:8201"
+      - "--node=3 node3:8202"
+      - "--worker-threads=4"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - data3:/app/data
+    ports:
+      - "51002:51002"
+      - "8202:8202"
     networks:
       - cluster_net
-    depends_on:
-      - node1
-      - node2
-      - node3
 
-# Named volumes so every replica keeps its own state
 volumes:
   data1:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/lib/idempotency-server/node_1
   data2:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/lib/idempotency-server/node_2
   data3:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/lib/idempotency-server/node_3
+
 networks:
   cluster_net:
     driver: bridge

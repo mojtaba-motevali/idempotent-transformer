@@ -1,0 +1,14 @@
+config:
+  target: 'unused'
+  processor: './parallel-different-workflow.js'
+  phases:
+    - name: 'Latency measurement'
+      arrivalRate: 5
+      duration: 60
+  # Publish per-workflow and per-step histogram metrics
+  # so the Artillery JSON report shows p50/p90/p95/p99 for each phase.
+  # Run: npm run test:latency-artillery
+scenarios:
+  - name: '6-step workflow latency'
+    flow:
+      - function: 'runWorkflow'

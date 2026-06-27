@@ -1,59 +1,46 @@
-use std::error::Error;
+use tracing::instrument;
 
-use chrono::Utc;
-use hiqlite::Client;
-use hiqlite_macros::params;
+use crate::{
+    error::RepositoryError,
+    schema::workflow::{Workflow, WorkflowStatus},
+    storage::state_machine::SharedStore,
+};
 
-use crate::schema::workflow::{Workflow, WorkflowStatus};
-
-pub async fn create_or_get_workflow(
-    client: &Client,
-    workflow_id: &str,
-    status: WorkflowStatus,
-    name: Option<String>,
-) -> Result<Workflow, Box<dyn Error + Send + Sync>> {
-    let mut result = client.execute_returning_one(
-        "INSERT INTO Workflows (id, status, created_at, name) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = $4 RETURNING *",
-        params![
-            workflow_id,
-            status as i64,
-            Utc::now().timestamp_millis(),
-            name
-        ],
-    ).await?;
-    Ok(Workflow {
-        id: result.get::<String>("id"),
-        status: result.get::<i64>("status"),
-        created_at: result.get::<i64>("created_at"),
-        expire_at: result.get::<Option<i64>>("expire_at"),
-        completed_at: result.get::<Option<i64>>("completed_at"),
-        name: result.get::<Option<String>>("name"),
-    })
+#[derive(Clone)]
+pub struct WorkflowRepository {
+    store: SharedStore,
 }
 
-pub async fn get_workflow(
-    client: &Client,
-    workflow_id: &str,
-) -> Result<Option<Workflow>, Box<dyn Error + Send + Sync>> {
-    let result = client
-        .query_as_optional::<Workflow, _>(
-            "SELECT * FROM Workflows WHERE id = $1",
-            params![workflow_id],
-        )
-        .await?;
-    Ok(result)
-}
+impl WorkflowRepository {
+    pub fn new(store: SharedStore) -> Self {
+        Self { store }
+    }
 
-pub async fn delete_expired_workflows(
-    client: &Client,
-    current_timestamp: i64,
-    status: i8,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "DELETE FROM Workflows WHERE expire_at < $1 AND status = $2",
-            params![current_timestamp, status],
-        )
-        .await?;
-    Ok(())
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn get_by_id(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<Workflow>, RepositoryError> {
+        Ok(self.store.lock().workflows.get(workflow_id).cloned())
+    }
+
+
+    #[instrument(skip(self), err)]
+    pub async fn delete_expired(&self, before_ms: i64) -> Result<u64, RepositoryError> {
+        let mut store = self.store.lock();
+        let expired: Vec<String> = store
+            .workflows
+            .values()
+            .filter(|wf| {
+                wf.status == WorkflowStatus::Completed as i64
+                    && wf.expire_at.map_or(false, |e| e < before_ms)
+            })
+            .map(|wf| wf.id.clone())
+            .collect();
+        let count = expired.len() as u64;
+        for id in &expired {
+            store.workflows.remove(id);
+        }
+        Ok(count)
+    }
 }

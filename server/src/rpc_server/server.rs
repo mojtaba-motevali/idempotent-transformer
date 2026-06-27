@@ -1,213 +1,236 @@
-use hiqlite::Client;
-
-use tonic::{Request, Response, Status, transport::Server};
 pub mod workflow_service {
     tonic::include_proto!("workflow_service");
 }
-use std::error::Error;
-use std::io;
 
-use crate::repositories::workflows::get_workflow;
-use crate::rpc_server::server::workflow_service::{
-    GenerateIdempotencyKeyRequest, GenerateIdempotencyKeyResponse, ReleaseCheckpointRequest,
-    ReleaseCheckpointResponse, WorkflowStartRequest, WorkflowStartResponse, WorkflowStatusRequest,
-    WorkflowStatusResponse,
-};
-use crate::services::checkpoint_service::{
-    CheckpointInput, CreateDurableIdempotencyKeyInput, LeaseCheckpointInput,
-    LeaseCheckpointReturnType, create_durable_idempotency_key, handle_checkpoint,
-    handle_lease_checkpoint, release_checkpoint,
-};
-use crate::services::workflow_service::{
-    CreateWorkflowInput, FinishWorkflowInput, create_workflow, finish_workflow,
-};
+use std::sync::Arc;
+
+use tonic::{Request, Response, Status};
+use tracing::instrument;
 
 use workflow_service::{
+    lease_checkpoint_response,
+    workflow_service_impl_server::{WorkflowServiceImpl, WorkflowServiceImplServer},
     CheckPointRequest, CheckPointResponse, CompleteWorkflowRequest, CompleteWorkflowResponse,
-    LeaseCheckpointRequest, LeaseCheckpointResponse,
-    lease_checkpoint_response::Response::RemainingLeaseTimeout,
-    lease_checkpoint_response::Response::Value, workflow_service_impl_server::WorkflowServiceImpl,
-    workflow_service_impl_server::WorkflowServiceImplServer,
+    GenerateIdempotencyKeyRequest, GenerateIdempotencyKeyResponse, LeaseCheckpointRequest,
+    LeaseCheckpointResponse, ReleaseCheckpointRequest, ReleaseCheckpointResponse,
+    WorkflowStartRequest, WorkflowStartResponse, WorkflowStatusRequest, WorkflowStatusResponse,
 };
 
-fn to_status<T>(result: Result<T, Box<dyn Error + Send + Sync>>) -> Result<T, Status> {
-    result.map_err(|e| {
-        if let Some(io_err) = e.downcast_ref::<io::Error>() {
-            match io_err.kind() {
-                io::ErrorKind::Interrupted => Status::aborted(io_err.to_string()),
-                io::ErrorKind::InvalidData => Status::aborted(io_err.to_string()),
-                io::ErrorKind::InvalidInput => Status::aborted(io_err.to_string()),
-                io::ErrorKind::Other => Status::internal(io_err.to_string()),
-                _ => Status::internal(io_err.to_string()),
-            }
-        } else {
-            // Not an io::Error — treat as unhandled/internal
-            Status::internal("Something went wrong.")
+use crate::error::{CheckpointError, WorkflowError};
+use crate::services::checkpoint_service::{
+    CheckpointInput, CheckpointService, CreateDurableIdempotencyKeyInput, LeaseCheckpointInput,
+    LeaseCheckpointOutput,
+};
+use crate::services::workflow_service::{FinishWorkflowInput, WorkflowService};
+
+// ── Error mappers ────────────────────────────────────────────────────────────
+
+fn workflow_err(e: WorkflowError) -> Status {
+    match e {
+        WorkflowError::NotFound { id } => {
+            Status::not_found(format!("workflow not found: {id}"))
         }
-    })
+        WorkflowError::FencingTokenNotFound { workflow_id } => {
+            Status::not_found(format!("fencing token not found for workflow: {workflow_id}"))
+        }
+        WorkflowError::FencingTokenExpired { stored, received } => Status::aborted(format!(
+            "fencing token expired (stored: {stored}, received: {received})"
+        )),
+        WorkflowError::Raft(msg) => Status::internal(format!("raft error: {msg}")),
+        WorkflowError::Repository(e) => Status::internal(format!("storage error: {e}")),
+    }
 }
 
-// defining a struct for our service
-pub struct WorkflowService {
-    client: Client,
+fn checkpoint_err(e: CheckpointError) -> Status {
+    match e {
+        CheckpointError::FencingTokenNotFound { workflow_id } => {
+            Status::not_found(format!("fencing token not found for workflow: {workflow_id}"))
+        }
+        CheckpointError::FencingTokenExpired => Status::aborted("fencing token expired"),
+        CheckpointError::NonDeterministicCheckpoint { position } => {
+            Status::aborted(format!("non-deterministic checkpoint at position {position}"))
+        }
+        CheckpointError::CheckpointValueNotFound { position } => {
+            Status::not_found(format!("checkpoint value not found at position {position}"))
+        }
+        CheckpointError::Repository(e) => Status::internal(format!("storage error: {e}")),
+    }
 }
 
-// implementing rpc for service defined in .proto
+// ── Handler struct ───────────────────────────────────────────────────────────
+
+pub struct WorkflowRpcHandler {
+    workflow_service: Arc<WorkflowService>,
+    checkpoint_service: Arc<CheckpointService>,
+}
+
+impl WorkflowRpcHandler {
+    pub fn new(
+        workflow_service: Arc<WorkflowService>,
+        checkpoint_service: Arc<CheckpointService>,
+    ) -> Self {
+        Self {
+            workflow_service,
+            checkpoint_service,
+        }
+    }
+}
+
+// ── RPC implementations ──────────────────────────────────────────────────────
+
 #[tonic::async_trait]
-impl WorkflowServiceImpl for WorkflowService {
-    async fn generate_idempotency_key(
-        &self,
-        request: Request<GenerateIdempotencyKeyRequest>,
-    ) -> Result<Response<GenerateIdempotencyKeyResponse>, Status> {
-        let data = request.into_inner();
-        let result = to_status(
-            create_durable_idempotency_key(
-                &self.client,
-                CreateDurableIdempotencyKeyInput {
-                    workflow_id: data.workflow_id,
-                    fencing_token: data.fencing_token,
-                    position: data.position,
-                },
-            )
-            .await,
-        )?;
-        Ok(Response::new(GenerateIdempotencyKeyResponse {
-            idempotency_key: result.idempotency_key,
-        }))
-    }
-    async fn checkpoint(
-        &self,
-        request: Request<CheckPointRequest>,
-    ) -> Result<Response<CheckPointResponse>, Status> {
-        let data = request.into_inner();
-        let result = to_status(
-            handle_checkpoint(
-                &self.client,
-                CheckpointInput {
-                    workflow_id: data.workflow_id,
-                    fencing_token: data.fencing_token,
-                    position: data.position,
-                    value: data.value,
-                    idempotency_key: data.idempotency_key,
-                },
-            )
-            .await,
-        )?;
-        Ok(Response::new(CheckPointResponse {
-            abort: result.abort,
-        }))
-    }
-
-    async fn lease_checkpoint(
-        &self,
-        request: Request<LeaseCheckpointRequest>,
-    ) -> Result<Response<LeaseCheckpointResponse>, Status> {
-        let data = request.into_inner();
-        let result = to_status(
-            handle_lease_checkpoint(
-                &self.client,
-                LeaseCheckpointInput {
-                    workflow_id: data.workflow_id,
-                    fencing_token: data.fencing_token,
-                    position: data.position,
-                    lease_timeout: data.lease_timeout,
-                    idempotency_key: data.idempotency_key,
-                },
-            )
-            .await,
-        )?;
-        Ok(Response::new(LeaseCheckpointResponse {
-            response: result.response.map(|r| match r {
-                LeaseCheckpointReturnType::CheckpointValue(value) => Value(value),
-                LeaseCheckpointReturnType::RemainingLeaseTimeout(remaining_lease_timeout) => {
-                    RemainingLeaseTimeout(remaining_lease_timeout)
-                }
-            }),
-        }))
-    }
-
+impl WorkflowServiceImpl for WorkflowRpcHandler {
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id), err)]
     async fn workflow_start(
         &self,
-        request: Request<WorkflowStartRequest>,
+        req: Request<WorkflowStartRequest>,
     ) -> Result<Response<WorkflowStartResponse>, Status> {
-        let data = request.into_inner();
-        let result = to_status(
-            create_workflow(
-                &self.client,
-                CreateWorkflowInput {
-                    workflow_id: data.workflow_id,
-                    name: data.context_name,
-                },
-            )
-            .await,
-        )?;
+        let data = req.into_inner();
+        let out = self
+            .workflow_service
+            .create(&data.workflow_id, data.context_name.as_deref())
+            .await
+            .map_err(workflow_err)?;
+
         Ok(Response::new(WorkflowStartResponse {
-            fencing_token: result.fencing_token,
+            fencing_token: out.fencing_token,
         }))
     }
 
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id, position = req.get_ref().position, fencing_token = req.get_ref().fencing_token), err)]
+    async fn checkpoint(
+        &self,
+        req: Request<CheckPointRequest>,
+    ) -> Result<Response<CheckPointResponse>, Status> {
+        let data = req.into_inner();
+        let out = self
+            .checkpoint_service
+            .checkpoint(CheckpointInput {
+                workflow_id: data.workflow_id,
+                value: data.value,
+                fencing_token: data.fencing_token,
+                position: data.position,
+                idempotency_key: data.idempotency_key,
+            })
+            .await
+            .map_err(checkpoint_err)?;
+
+        Ok(Response::new(CheckPointResponse { abort: out.abort }))
+    }
+
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id, position = req.get_ref().position, fencing_token = req.get_ref().fencing_token), err)]
+    async fn lease_checkpoint(
+        &self,
+        req: Request<LeaseCheckpointRequest>,
+    ) -> Result<Response<LeaseCheckpointResponse>, Status> {
+        let data = req.into_inner();
+        let out = self
+            .checkpoint_service
+            .lease(LeaseCheckpointInput {
+                workflow_id: data.workflow_id,
+                fencing_token: data.fencing_token,
+                lease_timeout: data.lease_timeout,
+                position: data.position,
+                idempotency_key: data.idempotency_key,
+            })
+            .await
+            .map_err(checkpoint_err)?;
+
+        let response = match out {
+            LeaseCheckpointOutput::CheckpointValue(v) => {
+                Some(lease_checkpoint_response::Response::Value(v))
+            }
+            LeaseCheckpointOutput::RemainingLeaseTimeout(t) => {
+                Some(lease_checkpoint_response::Response::RemainingLeaseTimeout(t))
+            }
+            LeaseCheckpointOutput::Leased => None,
+        };
+
+        Ok(Response::new(LeaseCheckpointResponse { response }))
+    }
+
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id, fencing_token = req.get_ref().fencing_token), err)]
     async fn complete_workflow(
         &self,
-        request: Request<CompleteWorkflowRequest>,
+        req: Request<CompleteWorkflowRequest>,
     ) -> Result<Response<CompleteWorkflowResponse>, Status> {
-        let data = request.into_inner();
-        to_status(
-            finish_workflow(
-                &self.client,
-                FinishWorkflowInput {
-                    workflow_id: data.workflow_id,
-                    fencing_token: data.fencing_token,
-                    expire_after: data.expire_after,
-                },
-            )
-            .await,
-        )?;
+        let data = req.into_inner();
+        self.workflow_service
+            .finish(FinishWorkflowInput {
+                workflow_id: data.workflow_id,
+                fencing_token: data.fencing_token,
+                expire_after: data.expire_after,
+            })
+            .await
+            .map_err(workflow_err)?;
+
         Ok(Response::new(CompleteWorkflowResponse {}))
     }
 
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id), err)]
     async fn workflow_status(
         &self,
-        request: Request<WorkflowStatusRequest>,
+        req: Request<WorkflowStatusRequest>,
     ) -> Result<Response<WorkflowStatusResponse>, Status> {
-        let data = request.into_inner();
-        let result = to_status(get_workflow(&self.client, &data.workflow_id).await)?;
-        if let Some(workflow) = result {
-            Ok(Response::new(WorkflowStatusResponse {
-                workflow_id: workflow.id,
-                status: workflow.status,
-                expire_at: workflow.expire_at,
-                completed_at: workflow.completed_at,
-                created_at: workflow.created_at,
-            }))
-        } else {
-            Err(Status::not_found("workflow_not_found"))
-        }
+        let data = req.into_inner();
+        let workflow = self
+            .workflow_service
+            .status(&data.workflow_id)
+            .await
+            .map_err(workflow_err)?;
+
+        Ok(Response::new(WorkflowStatusResponse {
+            workflow_id: workflow.id,
+            status: workflow.status,
+            expire_at: workflow.expire_at,
+            completed_at: workflow.completed_at,
+            created_at: workflow.created_at,
+        }))
     }
 
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id, position = req.get_ref().position), err)]
     async fn release_checkpoint(
         &self,
-        request: Request<ReleaseCheckpointRequest>,
+        req: Request<ReleaseCheckpointRequest>,
     ) -> Result<Response<ReleaseCheckpointResponse>, Status> {
-        let data = request.into_inner();
-        to_status(release_checkpoint(&self.client, &data.workflow_id, data.position).await)?;
+        let data = req.into_inner();
+        self.checkpoint_service
+            .release(&data.workflow_id, data.position)
+            .await
+            .map_err(checkpoint_err)?;
+
         Ok(Response::new(ReleaseCheckpointResponse {}))
+    }
+
+    #[instrument(skip(self), fields(workflow_id = %req.get_ref().workflow_id, position = req.get_ref().position, fencing_token = req.get_ref().fencing_token), err)]
+    async fn generate_idempotency_key(
+        &self,
+        req: Request<GenerateIdempotencyKeyRequest>,
+    ) -> Result<Response<GenerateIdempotencyKeyResponse>, Status> {
+        let data = req.into_inner();
+        let out = self
+            .checkpoint_service
+            .create_idempotency_key(CreateDurableIdempotencyKeyInput {
+                workflow_id: data.workflow_id,
+                fencing_token: data.fencing_token,
+                position: data.position,
+            })
+            .await
+            .map_err(checkpoint_err)?;
+
+        Ok(Response::new(GenerateIdempotencyKeyResponse {
+            idempotency_key: out.idempotency_key,
+        }))
     }
 }
 
-pub async fn start_server(
-    rpc_addr: &str,
-    client: &Client,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // defining address for our service
-    let addr = rpc_addr.parse().unwrap();
-    println!("Server listening on {addr}");
-    // adding our service to our server.
-    Server::builder()
-        .add_service(WorkflowServiceImplServer::new(WorkflowService {
-            // It's cheap to clone because of inner Arc.
-            client: client.clone(),
-        }))
-        .serve(addr)
+// ── Server startup ───────────────────────────────────────────────────────────
+
+pub async fn start_server(addr: &str, handler: WorkflowRpcHandler) -> anyhow::Result<()> {
+    tracing::info!(addr, "gRPC server listening");
+    tonic::transport::Server::builder()
+        .add_service(WorkflowServiceImplServer::new(handler))
+        .serve(addr.parse()?)
         .await?;
     Ok(())
 }

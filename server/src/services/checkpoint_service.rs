@@ -1,256 +1,288 @@
-use std::error::Error;
+use std::sync::Arc;
 
-use hiqlite::Client;
-use uuid::Uuid;
+use dashmap::DashMap;
+use tokio::sync::Mutex;
+use tracing::{debug, instrument};
 
-use crate::helpers::common::return_error_if_true;
-use crate::repositories::lease_checkpoint::{get_leased_checkpoint, lease_checkpoint};
-use crate::repositories::{
-    checkpoints::{create_checkpoint, get_checkpoint},
-    lease_checkpoint::remove_leased_checkpoint,
-    workflows_fencing_tokens::get_workflow_fencing_token,
+use crate::{
+    error::CheckpointError,
+    repositories::{
+        checkpoints::CheckpointRepository,
+        lease_checkpoint::LeaseRepository,
+        workflows_fencing_tokens::FencingTokenRepository,
+    },
 };
-use crate::schema::leased_checkpoint::LeasedCheckpointValue;
 
+// ── Input / Output types ────────────────────────────────────────────────────
+
+#[derive(Debug)]
 pub struct CheckpointInput {
     pub workflow_id: String,
+    pub value: Vec<u8>,
     pub fencing_token: i64,
     pub position: i64,
-    pub value: Vec<u8>,
     pub idempotency_key: String,
 }
 
+#[derive(Debug)]
 pub struct CheckpointOutput {
     pub abort: bool,
 }
 
-///
-/// Returns the remaining lease timeout in milliseconds.
-fn diff_lease_expiry_from_now(leased_checkpoint: &LeasedCheckpointValue) -> i64 {
-    let now = chrono::Utc::now().timestamp_millis();
-    let remaining_lease_timeout = leased_checkpoint
-        .created_at
-        .saturating_add(leased_checkpoint.lease_timeout)
-        .saturating_sub(now);
-    remaining_lease_timeout
-}
-
-pub async fn handle_checkpoint(
-    client: &Client,
-    data: CheckpointInput,
-) -> Result<CheckpointOutput, Box<dyn Error + Send + Sync>> {
-    let (internal_fencing_token, leased_checkpoint) = tokio::join!(
-        get_workflow_fencing_token(client, &data.workflow_id),
-        remove_leased_checkpoint(client, &data.workflow_id, data.position),
-    );
-
-    let stored_fencing_token = internal_fencing_token?;
-    let leased_checkpoint = leased_checkpoint?;
-
-    return_error_if_true(
-        stored_fencing_token.is_none(),
-        Box::new(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "fencing_token_not_found",
-        )),
-    )?;
-
-    let mut abort = false;
-    let is_fencing_token_expired = stored_fencing_token.unwrap() > data.fencing_token;
-
-    // Reject the result if the lease timeout is expired for the worker lease used to belong to.
-    // if lease timeout is expired, then we need to check if the fencing token is expired
-    if leased_checkpoint.is_some() && diff_lease_expiry_from_now(&leased_checkpoint.unwrap()) <= 0 {
-        return_error_if_true(
-            is_fencing_token_expired,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "fencing_token_expired",
-            )),
-        )?;
-    }
-
-    if is_fencing_token_expired {
-        abort = true;
-    }
-    create_checkpoint(
-        client,
-        &data.workflow_id,
-        Some(data.value),
-        data.position,
-        data.idempotency_key,
-    )
-    .await?;
-
-    Ok(CheckpointOutput { abort })
-}
-
+#[derive(Debug)]
 pub struct LeaseCheckpointInput {
     pub workflow_id: String,
     pub fencing_token: i64,
-    pub position: i64,
     pub lease_timeout: i64,
+    pub position: i64,
     pub idempotency_key: String,
 }
 
-pub enum LeaseCheckpointReturnType {
+#[derive(Debug)]
+pub enum LeaseCheckpointOutput {
     CheckpointValue(Vec<u8>),
     RemainingLeaseTimeout(i64),
+    Leased,
 }
 
-pub struct LeaseCheckpointOutput {
-    pub response: Option<LeaseCheckpointReturnType>,
-}
-
-pub async fn handle_lease_checkpoint(
-    client: &Client,
-    data: LeaseCheckpointInput,
-) -> Result<LeaseCheckpointOutput, Box<dyn Error + Send + Sync>> {
-    // A lock key can be any String to provide the most flexibility.
-    // It behaves the same as any other lock - it will be released on drop and as long as it
-    // exists, other locks will have to wait.
-    //
-    // In the current implementation, distributed locks have an internal timeout of 10 seconds.
-    // When this time expires, a lock will be considered "dead" because of network issues, just
-    // in case it has not been possible to release the lock properly. This prevents deadlocks
-    // just because some client or server crashed.
-
-    let result = get_checkpoint(client, &data.workflow_id, data.position).await?;
-
-    // if checkpoint is already leased, then we need to return the value
-    if let Some(checkpoint) = result {
-        return_error_if_true(
-            checkpoint.idempotency_key != data.idempotency_key,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "non_deterministic_checkpoint_found",
-            )),
-        )?;
-        return_error_if_true(
-            checkpoint.value.is_none(),
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "checkpoint_value_not_found",
-            )),
-        )?;
-        return Ok(LeaseCheckpointOutput {
-            response: Some(LeaseCheckpointReturnType::CheckpointValue(
-                checkpoint.value.unwrap(),
-            )),
-        });
-    }
-
-    let lock_key = format!("{}:{}", data.workflow_id, data.position);
-    let _ = client.lock(lock_key).await?;
-
-    let sent_fencing_token = data.fencing_token;
-    let (leased_checkpoint_result, workflow_fencing_token) = tokio::join!(
-        get_leased_checkpoint(client, &data.workflow_id, data.position),
-        get_workflow_fencing_token(client, &data.workflow_id),
-    );
-    let leased_checkpoint_option = leased_checkpoint_result?;
-    let found_fencing_token = workflow_fencing_token?;
-
-    if let Some(leased_checkpoint) = leased_checkpoint_option {
-        let remaining_time = diff_lease_expiry_from_now(&leased_checkpoint);
-        if remaining_time > 0 {
-            return Ok(LeaseCheckpointOutput {
-                response: Some(LeaseCheckpointReturnType::RemainingLeaseTimeout(
-                    remaining_time,
-                )),
-            });
-        }
-    }
-
-    return_error_if_true(
-        found_fencing_token.is_none(),
-        Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "fencing_token_not_found",
-        )),
-    )?;
-    // old fencing tokens can not be used to lease a checkpoint
-    let stored_fencing_token = found_fencing_token.unwrap();
-
-    return_error_if_true(
-        stored_fencing_token > sent_fencing_token,
-        Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "fencing_token_expired",
-        )),
-    )?;
-
-    // if fencing token is the same, then we need to lease the checkpoint
-    if sent_fencing_token == stored_fencing_token {
-        lease_checkpoint(client, data.workflow_id, data.position, data.lease_timeout).await?;
-        return Ok(LeaseCheckpointOutput { response: None });
-    }
-    Err(Box::new(std::io::Error::other("unexpected state")))
-}
-
-pub async fn release_checkpoint(
-    client: &Client,
-    workflow_id: &str,
-    position: i64,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    remove_leased_checkpoint(client, workflow_id, position).await?;
-    Ok(())
-}
-
+#[derive(Debug)]
 pub struct CreateDurableIdempotencyKeyInput {
     pub workflow_id: String,
     pub fencing_token: i64,
     pub position: i64,
 }
 
+#[derive(Debug)]
 pub struct CreateDurableIdempotencyKeyOutput {
     pub idempotency_key: String,
 }
 
-pub async fn create_durable_idempotency_key(
-    client: &Client,
-    data: CreateDurableIdempotencyKeyInput,
-) -> Result<CreateDurableIdempotencyKeyOutput, Box<dyn Error + Send + Sync>> {
-    let lock_key = format!("{}:{}", data.workflow_id, data.position);
-    let _ = client.lock(lock_key).await?;
+// ── Service ─────────────────────────────────────────────────────────────────
 
-    let result = get_checkpoint(client, &data.workflow_id, data.position).await?;
+pub struct CheckpointService {
+    checkpoints: Arc<CheckpointRepository>,
+    leases: Arc<LeaseRepository>,
+    fencing_tokens: Arc<FencingTokenRepository>,
+    locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
+}
 
-    // if checkpoint is already leased, then we need to return the value
-    if let Some(checkpoint) = result {
-        return Ok(CreateDurableIdempotencyKeyOutput {
-            idempotency_key: checkpoint.idempotency_key,
-        });
+impl CheckpointService {
+    pub fn new(
+        checkpoints: Arc<CheckpointRepository>,
+        leases: Arc<LeaseRepository>,
+        fencing_tokens: Arc<FencingTokenRepository>,
+    ) -> Self {
+        Self {
+            checkpoints,
+            leases,
+            fencing_tokens,
+            locks: Arc::new(DashMap::new()),
+        }
     }
 
-    let sent_fencing_token = data.fencing_token;
-    let workflow_fencing_token = get_workflow_fencing_token(client, &data.workflow_id).await?;
+    fn lock_key(workflow_id: &str, position: i64) -> String {
+        format!("{workflow_id}:{position}")
+    }
 
-    return_error_if_true(
-        workflow_fencing_token.is_none(),
-        Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "fencing_token_not_found",
-        )),
-    )?;
-    return_error_if_true(
-        workflow_fencing_token.unwrap() > sent_fencing_token,
-        Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "fencing_token_expired",
-        )),
-    )?;
-    let idempotency_key = Uuid::new_v4().to_string();
-    create_checkpoint(
-        client,
-        &data.workflow_id,
-        None,
-        data.position,
-        idempotency_key.clone(),
-    )
-    .await?;
+    async fn lock_position(&self, workflow_id: &str, position: i64) -> Arc<Mutex<()>> {
+        let key = Self::lock_key(workflow_id, position);
+        self.locks
+            .entry(key)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
 
-    Ok(CreateDurableIdempotencyKeyOutput {
-        idempotency_key: idempotency_key,
-    })
+    // ── checkpoint ──────────────────────────────────────────────────────────
+
+    #[instrument(
+        skip(self),
+        fields(
+            workflow_id = %input.workflow_id,
+            position    = input.position,
+            fencing_token = input.fencing_token
+        ),
+        err
+    )]
+    pub async fn checkpoint(
+        &self,
+        input: CheckpointInput,
+    ) -> Result<CheckpointOutput, CheckpointError> {
+        let (token_result, lease_option) = tokio::join!(
+            self.fencing_tokens.get(&input.workflow_id),
+            self.leases.get(&input.workflow_id, input.position),
+        );
+
+        let stored_token = token_result?
+            .ok_or_else(|| CheckpointError::FencingTokenNotFound {
+                workflow_id: input.workflow_id.clone(),
+            })?;
+
+        // Release lease unconditionally if one existed (ignoring result)
+        if lease_option.is_some() {
+            self.leases.release(&input.workflow_id, input.position).await;
+        }
+
+        let is_token_expired = stored_token > input.fencing_token;
+
+        let now = chrono::Utc::now().timestamp_millis();
+        let abort = match &lease_option {
+            Some(l) => {
+                let lease_expired = now > l.created_at + l.lease_timeout;
+                if lease_expired {
+                    is_token_expired
+                } else {
+                    false
+                }
+            }
+            None => is_token_expired,
+        };
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        self.checkpoints
+            .upsert(
+                &input.workflow_id,
+                input.position,
+                &input.idempotency_key,
+                Some(&input.value),
+                now_ms,
+            )
+            .await?;
+
+        if abort {
+            debug!(
+                workflow_id = %input.workflow_id,
+                position    = input.position,
+                "checkpoint aborted: fencing token expired"
+            );
+        }
+
+        Ok(CheckpointOutput { abort })
+    }
+
+    // ── lease ───────────────────────────────────────────────────────────────
+
+    #[instrument(
+        skip(self),
+        fields(
+            workflow_id   = %input.workflow_id,
+            position      = input.position,
+            fencing_token = input.fencing_token
+        ),
+        err
+    )]
+    pub async fn lease(
+        &self,
+        input: LeaseCheckpointInput,
+    ) -> Result<LeaseCheckpointOutput, CheckpointError> {
+        let mutex = self.lock_position(&input.workflow_id, input.position).await;
+        let _guard = mutex.lock().await;
+
+        let (lease_result, token_result) = tokio::join!(
+            self.leases.get(&input.workflow_id, input.position),
+            self.fencing_tokens.get(&input.workflow_id),
+        );
+
+        let stored_token = token_result?
+            .ok_or_else(|| CheckpointError::FencingTokenNotFound {
+                workflow_id: input.workflow_id.clone(),
+            })?;
+
+        if stored_token > input.fencing_token {
+            return Err(CheckpointError::FencingTokenExpired);
+        }
+
+        // If there is an active lease with remaining time, return the remaining duration.
+        if let Some(lease) = lease_result {
+            let now = chrono::Utc::now().timestamp_millis();
+            let expires_at = lease.created_at + lease.lease_timeout;
+            if now < expires_at {
+                let remaining = expires_at - now;
+                return Ok(LeaseCheckpointOutput::RemainingLeaseTimeout(remaining));
+            }
+        }
+
+        // Check whether a committed checkpoint already exists.
+        if let Some(cp) = self
+            .checkpoints
+            .get(&input.workflow_id, input.position)
+            .await?
+        {
+            if cp.idempotency_key != input.idempotency_key {
+                return Err(CheckpointError::NonDeterministicCheckpoint {
+                    position: input.position,
+                });
+            }
+            return match cp.value {
+                Some(v) => Ok(LeaseCheckpointOutput::CheckpointValue(v)),
+                None => Err(CheckpointError::CheckpointValueNotFound {
+                    position: input.position,
+                }),
+            };
+        }
+
+        // Acquire a new lease.
+        self.leases
+            .acquire(&input.workflow_id, input.position, input.lease_timeout)
+            .await;
+
+        Ok(LeaseCheckpointOutput::Leased)
+    }
+
+    // ── release ─────────────────────────────────────────────────────────────
+
+    #[instrument(skip(self), fields(workflow_id, position), err)]
+    pub async fn release(
+        &self,
+        workflow_id: &str,
+        position: i64,
+    ) -> Result<(), CheckpointError> {
+        self.leases.release(workflow_id, position).await;
+        Ok(())
+    }
+
+    // ── create_idempotency_key ───────────────────────────────────────────────
+
+    #[instrument(
+        skip(self),
+        fields(
+            workflow_id   = %input.workflow_id,
+            position      = input.position,
+            fencing_token = input.fencing_token
+        ),
+        err
+    )]
+    pub async fn create_idempotency_key(
+        &self,
+        input: CreateDurableIdempotencyKeyInput,
+    ) -> Result<CreateDurableIdempotencyKeyOutput, CheckpointError> {
+        let mutex = self.lock_position(&input.workflow_id, input.position).await;
+        let _guard = mutex.lock().await;
+
+        let stored_token = self
+            .fencing_tokens
+            .get(&input.workflow_id)
+            .await?
+            .ok_or_else(|| CheckpointError::FencingTokenNotFound {
+                workflow_id: input.workflow_id.clone(),
+            })?;
+
+        if stored_token > input.fencing_token {
+            return Err(CheckpointError::FencingTokenExpired);
+        }
+
+        let idempotency_key = uuid::Uuid::new_v4().to_string();
+        let now_ms = chrono::Utc::now().timestamp_millis();
+
+        self.checkpoints
+            .upsert(
+                &input.workflow_id,
+                input.position,
+                &idempotency_key,
+                None,
+                now_ms,
+            )
+            .await?;
+
+        Ok(CreateDurableIdempotencyKeyOutput { idempotency_key })
+    }
 }

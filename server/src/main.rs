@@ -1,121 +1,119 @@
-use database::db::{get_client, init_tables};
-use database::server::Server;
-use std::env::var;
-
-use rpc_server::server::start_server;
-use std::error::Error;
-use tokio::signal;
+use clap::Parser;
+use std::sync::Arc;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
 
-use crate::cron::clean_up_workflows::clean_up_expired_workflows;
+use idempotency_server::{
+    cli::Args,
+    cron::clean_up_workflows::clean_up_expired_workflows,
+    database::{db::RaftNode, server::Server},
+    repositories::{
+        checkpoints::CheckpointRepository, lease_checkpoint::LeaseRepository,
+        workflows::WorkflowRepository, workflows_fencing_tokens::FencingTokenRepository,
+    },
+    rpc_server::server::{WorkflowRpcHandler, start_server},
+    services::{checkpoint_service::CheckpointService, workflow_service::WorkflowService},
+    storage::{tcp_server::TcpRaftServer, type_config::Node},
+};
 
-mod cron;
-mod database;
-mod helpers;
-mod repositories;
-mod rpc_server;
-mod schema;
-mod services;
+fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
 
-async fn shutdown_gracefully(
-    mut tokio_cron_scheduler: tokio_cron_scheduler::JobScheduler,
-    shutdown_handle: impl std::future::Future<Output = Result<(), hiqlite::Error>>,
-) {
-    if let Err(e) = shutdown_handle.await {
-        error!("Error during database shutdown: {}", e);
-    }
-    if let Err(e) = tokio_cron_scheduler.shutdown().await {
-        error!("Error shutting down scheduler: {}", e);
-    }
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(args.worker_threads)
+        .thread_stack_size(args.stack_size)
+        .enable_all()
+        .build()?
+        .block_on(run(args))
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    dotenvy::dotenv().ok();
-    let total_threads = var("TOKIO_WORKER_THREADS")
-        .expect("TOKIO_WORKER_THREADS is not set")
-        .parse::<usize>()
-        .unwrap();
-    let stack_size = var("TOKIO_WORKER_STACK_SIZE")
-        .expect("TOKIO_WORKER_STACK_SIZE is not set")
-        .parse::<usize>()
-        .unwrap();
-    println!("Starting server");
-    // Configure Tokio runtime with custom stack size and thread count
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(total_threads)
-        .thread_stack_size(stack_size)
-        .enable_all()
-        .build()
-        .unwrap();
+async fn run(args: Args) -> anyhow::Result<()> {
+    // Parse peers
+    let peers: Vec<(u64, Node)> = args
+        .nodes
+        .iter()
+        .map(|s| {
+            let srv = Server::parse(s).unwrap();
+            (
+                srv.id,
+                Node {
+                    addr_raft: srv.addr_raft,
+                },
+            )
+        })
+        .collect();
 
-    runtime.block_on(async {
-        let server_node = Server {
-            id: var("NODE_ID")
-                .expect("NODE_ID is not set")
-                .parse::<u64>()
-                .unwrap(),
-            addr_api: var("ADDR_API").expect("ADDR_API is not set").to_string(),
-            addr_raft: var("ADDR_RAFT").expect("ADDR_RAFT is not set").to_string(),
-        };
+    // Tracing subscriber
+    tracing_subscriber::fmt()
+        .with_target(true)
+        .with_level(true)
+        .with_env_filter(
+            EnvFilter::try_from_env("RUST_LOG").unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
-        let rpc_addr = var("RPC_ADDR").expect("RPC_ADDR is not set").to_string();
-        let nodes = var("NODES")
-            .expect("NODES is not set")
-            .split(",")
-            .map(|s| Server::parse(s).unwrap())
-            .collect::<Vec<Server>>();
-        let data_dir = var("DATA_DIR").expect("DATA_DIR is not set").to_string();
+    tracing::info!(node_id = args.node_id, rpc_addr = %args.rpc_addr, "starting server");
 
-        tracing_subscriber::fmt()
-            .with_target(true)
-            .with_level(true)
-            .with_env_filter(EnvFilter::from("info"))
-            .init();
+    // 1. Start Raft node
+    let raft_node = RaftNode::start(args.node_id, peers, &args.data_dir).await?;
+    let store = raft_node.store.clone();
+    let raft = Arc::new(raft_node.raft.clone());
 
-        let client = get_client(server_node.clone(), data_dir, nodes)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-        let mut shutdown_handle = client.shutdown_handle()?;
+    // 2. Repositories
+    let workflow_repo = Arc::new(WorkflowRepository::new(store.clone()));
+    let checkpoint_repo = Arc::new(CheckpointRepository::new(store.clone()));
+    let fencing_token_repo = Arc::new(FencingTokenRepository::new(store.clone()));
+    let lease_repo = Arc::new(LeaseRepository::new());
 
-        init_tables(&client)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-        let scheduler = clean_up_expired_workflows(&client).await?;
+    // 3. Services
+    let workflow_svc = Arc::new(WorkflowService::new(
+        workflow_repo,
+        fencing_token_repo.clone(),
+        checkpoint_repo.clone(),
+        raft.clone(),
+        args.node_id,
+    ));
 
-        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
-        let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
+    let checkpoint_svc = Arc::new(CheckpointService::new(
+        checkpoint_repo,
+        lease_repo,
+        fencing_token_repo,
+    ));
 
-        tokio::select! {
-            result = start_server(&rpc_addr, &client) => {
-                match result {
-                    Ok(_) => {
-                        error!("Server stopped unexpectedly");
-                        shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
-                        Ok(())
-                    }
-                    Err(e) => {
-                        error!("Error starting server: {}", e);
-                        shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
-                        Err(e)
-                    }
-                }
-            }
-            _ = signal::ctrl_c() => {
-                error!("Received Ctrl+C, initiating graceful shutdown...");
-                shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
-                Ok(())
-            }
-            _ = sigterm.recv() => {
-                error!("Received SIGTERM, initiating graceful shutdown...");
-                shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
-                Ok(())
-            }
-            _ = sigint.recv() => {
-                error!("Received SIGINT, initiating graceful shutdown...");
-                shutdown_gracefully(scheduler, shutdown_handle.wait()).await;
-                Ok(())
+    // 4. RPC handler
+    let handler = WorkflowRpcHandler::new(workflow_svc.clone(), checkpoint_svc);
+
+    // 5. Raft TCP server (separate port from gRPC)
+    let tcp_raft = TcpRaftServer::new(raft.clone());
+    let addr_raft = args.addr_raft.clone();
+    let tcp_raft_fut = tokio::spawn(async move {
+        if let Err(e) = tcp_raft.listen(&addr_raft).await {
+            error!(err = %e, "Raft TCP server error");
+        }
+    });
+
+    // 6. Cron
+    let mut scheduler = clean_up_expired_workflows(workflow_svc).await?;
+
+    // 7. gRPC + shutdown
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+
+    tokio::select! {
+        res = start_server(args.rpc_addr.as_str(), handler) => {
+            match res {
+                Ok(()) => error!("gRPC server stopped unexpectedly"),
+                Err(e) => error!(err = %e, "gRPC server error"),
             }
         }
-    })
+        res = tcp_raft_fut => {
+            if let Err(e) = res { error!(err = %e, "Raft TCP task panicked"); }
+        }
+        _ = tokio::signal::ctrl_c() => tracing::info!(signal = "SIGINT", "shutting down"),
+        _ = sigterm.recv() => tracing::info!(signal = "SIGTERM", "shutting down"),
+    }
+
+    if let Err(e) = scheduler.shutdown().await {
+        error!(err = %e, "scheduler shutdown error");
+    }
+    Ok(())
 }

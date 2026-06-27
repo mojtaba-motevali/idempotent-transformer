@@ -1,43 +1,48 @@
-use std::error::Error;
+use std::collections::HashSet;
 
-use hiqlite::Client;
-use hiqlite_macros::params;
+use tracing::instrument;
 
-pub async fn get_workflow_fencing_token(
-    client: &Client,
-    workflow_id: &str,
-) -> Result<Option<i64>, Box<dyn Error + Send + Sync>> {
-    let fencing_token = client
-        .query_as_optional::<i64, _>(
-            "SELECT fencing_token FROM WorkflowFencingTokens WHERE workflow_id = $1",
-            params![workflow_id],
-        )
-        .await?;
-    Ok(fencing_token)
+use crate::{
+    error::RepositoryError,
+    schema::workflow::WorkflowStatus,
+    storage::state_machine::SharedStore,
+};
+
+#[derive(Clone)]
+pub struct FencingTokenRepository {
+    store: SharedStore,
 }
 
-pub async fn increment_workflow_fencing_token(
-    client: &Client,
-    workflow_id: &str,
-    fencing_token: i64,
-) -> Result<i64, Box<dyn Error + Send + Sync>> {
-    let mut result = client.execute_returning_one(
-        "INSERT INTO WorkflowFencingTokens (workflow_id, fencing_token) VALUES ($1, $2) ON CONFLICT (workflow_id) DO UPDATE SET fencing_token = WorkflowFencingTokens.fencing_token + 1 RETURNING fencing_token",
-        params![workflow_id, fencing_token],
-    ).await?;
-    Ok(result.get::<i64>("fencing_token"))
-}
+impl FencingTokenRepository {
+    pub fn new(store: SharedStore) -> Self {
+        Self { store }
+    }
 
-pub async fn delete_expired_workflow_fencing_tokens(
-    client: &Client,
-    current_timestamp: i64,
-    status: i8,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "DELETE FROM WorkflowFencingTokens WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
-            params![current_timestamp, status ],
-        )
-        .await?;
-    Ok(())
+    #[instrument(skip(self), fields(workflow_id), err)]
+    pub async fn get(&self, workflow_id: &str) -> Result<Option<i64>, RepositoryError> {
+        Ok(self.store.lock().fencing_tokens.get(workflow_id).copied())
+    }
+
+    /// Deletes fencing tokens for completed workflows whose `expire_at` is
+    /// before `before_ms`.  Acquires the store once for both the scan and
+    /// the removal.
+    #[instrument(skip(self), err)]
+    pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError> {
+        let mut store = self.store.lock();
+        let expired: HashSet<String> = store
+            .workflows
+            .values()
+            .filter(|wf| {
+                wf.status == WorkflowStatus::Completed as i64
+                    && wf.expire_at.map_or(false, |e| e < before_ms)
+            })
+            .map(|wf| wf.id.clone())
+            .collect();
+
+        let count = expired.len() as u64;
+        for id in &expired {
+            store.fencing_tokens.remove(id);
+        }
+        Ok(count)
+    }
 }

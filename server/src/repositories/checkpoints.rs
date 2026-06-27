@@ -1,51 +1,78 @@
-use chrono::Utc;
-use std::error::Error;
+use std::collections::HashSet;
 
-use hiqlite::Client;
-use hiqlite_macros::params;
+use tracing::instrument;
 
-use crate::schema::checkpoint::CheckpointValue;
+use crate::{
+    error::RepositoryError,
+    schema::{checkpoint::Checkpoint, workflow::WorkflowStatus},
+    storage::state_machine::SharedStore,
+};
 
-pub async fn get_checkpoint(
-    client: &Client,
-    workflow_id: &str,
-    position: i64,
-) -> Result<Option<CheckpointValue>, Box<dyn Error + Send + Sync>> {
-    let checkpoint = client
-        .query_as_optional::<CheckpointValue, _>(
-            "SELECT position, idempotency_key, value FROM Checkpoints WHERE workflow_id = $1 AND position = $2",
-            params![workflow_id, position],
-        )
-        .await?;
-    Ok(checkpoint)
+#[derive(Clone)]
+pub struct CheckpointRepository {
+    store: SharedStore,
 }
 
-pub async fn create_checkpoint(
-    client: &Client,
-    workflow_id: &str,
-    value: Option<Vec<u8>>,
-    position: i64,
-    idempotency_key: String,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "INSERT INTO Checkpoints (workflow_id, position, idempotency_key, value, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (workflow_id, position) DO UPDATE SET created_at = $5",
-            params![workflow_id, position, idempotency_key, value, Utc::now().timestamp_millis()],
-        )
-        .await?;
-    Ok(())
-}
+impl CheckpointRepository {
+    pub fn new(store: SharedStore) -> Self {
+        Self { store }
+    }
 
-pub async fn delete_expired_checkpoints(
-    client: &Client,
-    current_timestamp: i64,
-    status: i8,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    client
-        .execute(
-            "DELETE FROM Checkpoints WHERE workflow_id IN (SELECT id FROM Workflows WHERE expire_at < $1 AND status = $2)",
-            params![current_timestamp, status ],
-        )
-        .await?;
-    Ok(())
+    #[instrument(skip(self), fields(workflow_id, position), err)]
+    pub async fn upsert(
+        &self,
+        workflow_id: &str,
+        position: i64,
+        idempotency_key: &str,
+        value: Option<&[u8]>,
+        created_at: i64,
+    ) -> Result<(), RepositoryError> {
+        let mut store = self.store.lock();
+        store.checkpoints.insert(
+            (workflow_id.to_owned(), position),
+            Checkpoint {
+                workflow_id:     workflow_id.to_owned(),
+                position,
+                value:           value.map(<[u8]>::to_vec),
+                idempotency_key: idempotency_key.to_owned(),
+                created_at,
+            },
+        );
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(workflow_id, position), err)]
+    pub async fn get(
+        &self,
+        workflow_id: &str,
+        position: i64,
+    ) -> Result<Option<Checkpoint>, RepositoryError> {
+        Ok(self
+            .store
+            .lock()
+            .checkpoints
+            .get(&(workflow_id.to_owned(), position))
+            .cloned())
+    }
+
+    /// Deletes all checkpoints belonging to completed workflows whose
+    /// `expire_at` is before `before_ms`.  Acquires the store once for both
+    /// the expired-workflow scan and the checkpoint removal.
+    #[instrument(skip(self), err)]
+    pub async fn delete_for_completed(&self, before_ms: i64) -> Result<u64, RepositoryError> {
+        let mut store = self.store.lock();
+        let expired: HashSet<String> = store
+            .workflows
+            .values()
+            .filter(|wf| {
+                wf.status == WorkflowStatus::Completed as i64
+                    && wf.expire_at.map_or(false, |e| e < before_ms)
+            })
+            .map(|wf| wf.id.clone())
+            .collect();
+
+        let before = store.checkpoints.len();
+        store.checkpoints.retain(|(wf_id, _), _| !expired.contains(wf_id));
+        Ok((before - store.checkpoints.len()) as u64)
+    }
 }

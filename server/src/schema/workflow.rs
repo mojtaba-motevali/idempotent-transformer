@@ -1,4 +1,3 @@
-use hiqlite::Row;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,21 +14,4 @@ pub struct Workflow {
     pub completed_at: Option<i64>,
     pub name: Option<String>,
     pub created_at: i64,
-}
-
-impl From<Row<'_>> for Workflow {
-    fn from(mut row: Row<'_>) -> Self {
-        Self {
-            id: row.get("id"),
-            status: match row.get::<i64>("status") {
-                0 => WorkflowStatus::Running,
-                1 => WorkflowStatus::Completed,
-                _ => panic!("Invalid workflow status"),
-            } as i64,
-            expire_at: row.get::<Option<i64>>("expire_at"),
-            completed_at: row.get::<Option<i64>>("completed_at"),
-            name: row.get::<Option<String>>("name"),
-            created_at: row.get("created_at"),
-        }
-    }
 }
